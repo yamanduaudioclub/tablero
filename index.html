@@ -48,10 +48,14 @@
     background: linear-gradient(155deg, var(--copper), #a9673a); display:flex; align-items:center; justify-content:center; font-size:26px; }
   .login-card h1{ font-size:1.3rem; margin-bottom:6px; }
   .login-card p{ color:var(--paper-mute); font-size:.88rem; margin:0 0 20px; }
-  .login-card input{ width:100%; margin-bottom:12px; }
-  .login-card .status{ margin-top:14px; font-size:.84rem; color:var(--paper-dim); min-height:20px; }
-  .login-card .status.err{ color:#ffb3ae; }
-  .login-card .status.ok{ color:var(--good); }
+  .login-card input{
+    width:100%; margin-bottom:12px; background: var(--ink-900); border:1px solid var(--hairline-strong);
+    color:var(--paper); border-radius:8px; padding:10px 12px; font-size:.92rem; font-family:inherit;
+  }
+  .login-card input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  .status{ font-size:.84rem; color:var(--paper-dim); min-height:20px; margin-top:14px; }
+  .status.err{ color:#ffb3ae; }
+  .status.ok{ color:var(--good); }
 
   /* ---------- header ---------- */
   header.top{ display:flex; align-items:flex-start; justify-content:space-between; gap:20px;
@@ -243,9 +247,10 @@
   <div class="login-card">
     <div class="mark">🎛️</div>
     <h1>Consola Yamandú</h1>
-    <p>Acceso solo para el equipo. Ingresá tu mail y te mandamos un link para entrar, sin contraseña.</p>
-    <input type="email" id="login-email" placeholder="tu@mail.com" autocomplete="email">
-    <button class="btn primary block" id="login-btn" type="button">Enviar link de acceso</button>
+    <p>Acceso solo para el equipo. Ingresá el mail y la contraseña de la cuenta compartida.</p>
+    <input type="email" id="login-email" placeholder="tu@mail.com" autocomplete="username">
+    <input type="password" id="login-password" placeholder="Contraseña" autocomplete="current-password">
+    <button class="btn primary block" id="login-btn" type="button">Iniciar sesión</button>
     <p class="status" id="login-status"></p>
   </div>
 </div>
@@ -424,6 +429,16 @@
           <div class="sim-grid" id="sim-grid"></div>
         </div>
       </div>
+
+      <div class="panel">
+        <div class="panel-head"><div><h2>Cuenta</h2><p class="hint">Cambiar la contraseña de acceso compartida del equipo.</p></div></div>
+        <div class="form-grid full">
+          <div class="field"><label for="acc-pass1">Contraseña nueva</label><input type="password" id="acc-pass1" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
+          <div class="field"><label for="acc-pass2">Repetir contraseña nueva</label><input type="password" id="acc-pass2" placeholder="Repetir" autocomplete="new-password"></div>
+        </div>
+        <div class="form-actions"><button class="btn primary" id="save-password-btn" type="button">Cambiar contraseña</button></div>
+        <p class="status" id="account-status" style="margin-top:10px;"></p>
+      </div>
     </div>
   </div>
 
@@ -560,28 +575,50 @@
   }
   async function doLogin(){
     var email = document.getElementById('login-email').value.trim();
+    var password = document.getElementById('login-password').value;
     var statusEl = document.getElementById('login-status');
-    if (!email){ statusEl.textContent = 'Ingresá tu mail.'; statusEl.className = 'status err'; return; }
+    if (!email || !password){ statusEl.textContent = 'Ingresá mail y contraseña.'; statusEl.className = 'status err'; return; }
     var btn = document.getElementById('login-btn');
-    btn.disabled = true; btn.textContent = 'Enviando…';
+    btn.disabled = true; btn.textContent = 'Entrando…';
     statusEl.textContent = ''; statusEl.className = 'status';
     try{
-      var redirectTo = window.location.origin + window.location.pathname;
-      var res = await sb.auth.signInWithOtp({ email: email, options: { emailRedirectTo: redirectTo } });
+      var res = await sb.auth.signInWithPassword({ email: email, password: password });
       if (res.error) throw res.error;
-      statusEl.textContent = 'Listo — revisá tu mail (' + email + ') y tocá el link para entrar.';
-      statusEl.className = 'status ok';
+      // success: onAuthStateChange fires renderAuthGate() + boot()
     } catch(err){
-      statusEl.textContent = 'No se pudo enviar el link: ' + (err && err.message ? err.message : 'error desconocido');
+      statusEl.textContent = 'No se pudo iniciar sesión: ' + (err && err.message ? err.message : 'error desconocido');
       statusEl.className = 'status err';
     } finally {
-      btn.disabled = false; btn.textContent = 'Enviar link de acceso';
+      btn.disabled = false; btn.textContent = 'Iniciar sesión';
     }
   }
   async function doLogout(){
     await sb.auth.signOut();
     booted = false;
     renderAuthGate();
+  }
+  async function doChangePassword(){
+    var p1 = document.getElementById('acc-pass1').value;
+    var p2 = document.getElementById('acc-pass2').value;
+    var statusEl = document.getElementById('account-status');
+    statusEl.textContent = ''; statusEl.className = 'status';
+    if (!p1 || p1.length < 6){ statusEl.textContent = 'La contraseña tiene que tener al menos 6 caracteres.'; statusEl.className = 'status err'; return; }
+    if (p1 !== p2){ statusEl.textContent = 'Las contraseñas no coinciden.'; statusEl.className = 'status err'; return; }
+    var btn = document.getElementById('save-password-btn');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try{
+      var res = await sb.auth.updateUser({ password: p1 });
+      if (res.error) throw res.error;
+      document.getElementById('acc-pass1').value = '';
+      document.getElementById('acc-pass2').value = '';
+      statusEl.textContent = 'Contraseña actualizada.';
+      statusEl.className = 'status ok';
+    } catch(err){
+      statusEl.textContent = 'No se pudo cambiar la contraseña: ' + (err && err.message ? err.message : 'error desconocido');
+      statusEl.className = 'status err';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Cambiar contraseña';
+    }
   }
 
   // ---------- error / loading UI ----------
@@ -1015,7 +1052,9 @@
   // ---------- events: login ----------
   document.getElementById('login-btn').addEventListener('click', doLogin);
   document.getElementById('login-email').addEventListener('keydown', function(e){ if (e.key==='Enter') doLogin(); });
+  document.getElementById('login-password').addEventListener('keydown', function(e){ if (e.key==='Enter') doLogin(); });
   document.getElementById('logout-btn').addEventListener('click', doLogout);
+  document.getElementById('save-password-btn').addEventListener('click', doChangePassword);
 
   // ---------- events: month nav ----------
   document.getElementById('month-prev').addEventListener('click', function(){ STATE.monthId = shiftMonth(STATE.monthId, -1); reloadAndRender(); });
