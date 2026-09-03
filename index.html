@@ -161,6 +161,22 @@
   .lineitem-total{ display:flex; justify-content:space-between; padding-top:8px; margin-top:4px; border-top:1px dashed var(--hairline-strong); font-size:.85rem; color:var(--paper-dim); }
   .lineitem-total .num{ color:var(--paper); font-weight:600; }
 
+  .import-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+  .import-row label.btn{ display:inline-flex; align-items:center; }
+  .import-preview{ margin-top:12px; padding:14px; border-radius:var(--radius-sm); background:var(--ink-900); border:1px solid var(--hairline-strong); }
+  .import-preview .head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+  .import-preview .head h3{ font-size:.88rem; }
+  .import-table{ width:100%; border-collapse:collapse; font-size:.82rem; }
+  .import-table th{ text-align:left; font-size:.66rem; text-transform:uppercase; letter-spacing:.04em; color:var(--paper-mute); padding:4px 8px; border-bottom:1px solid var(--hairline-strong); }
+  .import-table td{ padding:6px 8px; border-bottom:1px solid var(--hairline); vertical-align:middle; }
+  .import-table tr.unmatched td{ color:var(--warning); }
+  .import-table .num{ text-align:right; }
+  .import-table .add-cat-btn{ font-size:.7rem; padding:3px 8px; }
+  .import-total{ display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed var(--hairline-strong); font-size:.86rem; }
+  .import-total .num{ font-family:"JetBrains Mono",monospace; font-weight:700; color:var(--paper); }
+  .import-status{ font-size:.78rem; color:var(--paper-mute); margin-top:6px; }
+  .import-status.warn{ color:var(--warning); }
+
   .config-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
   .config-row.three{ grid-template-columns:1fr 1fr 1fr; }
 
@@ -241,6 +257,7 @@
 </head>
 <body>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- ================= LOGIN SCREEN ================= -->
 <div class="login-screen" id="login-screen">
@@ -344,7 +361,14 @@
           <p class="hint" style="margin:2px 0 10px;">Producto, stock inicial y final a costo. Calcula el consumo y lo suma al costo de la noche.</p>
           <div class="lineitem-head barra" id="barra-head" hidden><span>Producto</span><span>Costo u.</span><span>Stock inicial</span><span>Stock final</span><span></span></div>
           <div id="night-barra"></div>
-          <button class="btn small" id="add-barra-btn" type="button">+ Agregar producto</button>
+          <div class="import-row">
+            <button class="btn small" id="add-barra-btn" type="button">+ Agregar producto</button>
+            <button class="btn small ghost" id="download-template-btn" type="button">⭳ Planilla modelo (Excel)</button>
+            <label class="btn small ghost" for="barra-import-file">⭱ Importar planilla de stock</label>
+            <input type="file" id="barra-import-file" accept=".xlsx,.xls,.csv" hidden>
+          </div>
+          <p class="hint" style="margin:6px 0 0;">La planilla necesita columnas <strong>Producto</strong>, <strong>Stock inicial</strong> y <strong>Stock final</strong> (el costo unitario es opcional — si no lo pone, usa el del catálogo). Descargá la modelo para tener los nombres de producto ya bien escritos.</p>
+          <div id="barra-import-preview" hidden></div>
         </div>
 
         <div class="field" style="margin-top:16px;">
@@ -884,6 +908,128 @@
     }).join('');
   }
 
+  // ---------- importar planilla de stock (Excel) ----------
+  var importedRows = [];
+  function normName(s){
+    return String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  }
+  function downloadStockTemplate(){
+    if (typeof XLSX === 'undefined'){ alert('No se pudo cargar la librería de Excel. Probá de nuevo en un momento.'); return; }
+    var rows = STATE.productos.length
+      ? STATE.productos.map(function(p){ return { 'Producto': p.nombre, 'Stock inicial': '', 'Stock final': '', 'Costo unitario': p.costo_unitario || 0 }; })
+      : [{ 'Producto': '', 'Stock inicial': '', 'Stock final': '', 'Costo unitario': '' }];
+    var ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock');
+    XLSX.writeFile(wb, 'stock-barra-' + STATE.monthId + '.xlsx');
+  }
+  function findColKey(row, candidates){
+    var keys = Object.keys(row);
+    for (var i=0;i<keys.length;i++){
+      if (candidates.indexOf(normName(keys[i])) >= 0) return keys[i];
+    }
+    return null;
+  }
+  function handleStockFile(file){
+    if (typeof XLSX === 'undefined'){ alert('No se pudo cargar la librería de Excel. Probá de nuevo en un momento.'); return; }
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, { type:'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var json = XLSX.utils.sheet_to_json(ws, { defval:'' });
+        importedRows = json.map(function(row){
+          var kNombre = findColKey(row, ['producto','nombre','item','articulo']);
+          var kIni = findColKey(row, ['stock inicial','inicial','stock ini']);
+          var kFin = findColKey(row, ['stock final','final','stock fin']);
+          var kCosto = findColKey(row, ['costo unitario','costo u','costo','costo u.']);
+          var nombre = kNombre ? String(row[kNombre]).trim() : '';
+          var stockIni = num(kIni ? row[kIni] : 0);
+          var stockFin = num(kFin ? row[kFin] : 0);
+          var costoFile = (kCosto && row[kCosto] !== '') ? num(row[kCosto]) : null;
+          var match = STATE.productos.find(function(p){ return normName(p.nombre) === normName(nombre); });
+          var costo = match ? match.costo_unitario : (costoFile != null ? costoFile : 0);
+          var consumo = Math.max(0, stockIni - stockFin);
+          return {
+            nombre: nombre, producto_id: match ? match.id : null,
+            stock_inicial: stockIni, stock_final: stockFin, costo_unitario: costo,
+            consumo: consumo, costoTotal: consumo * costo
+          };
+        }).filter(function(r){ return r.nombre; });
+        renderImportPreview();
+      } catch(err){
+        alert('No se pudo leer la planilla: ' + (err && err.message ? err.message : 'formato no reconocido. Probá con .xlsx'));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  function renderImportPreview(){
+    var box = document.getElementById('barra-import-preview');
+    if (!importedRows.length){ box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    var total = importedRows.reduce(function(s,r){ return s + r.costoTotal; }, 0);
+    var unmatchedCount = importedRows.filter(function(r){ return !r.producto_id; }).length;
+    box.innerHTML =
+      '<div class="import-preview">' +
+        '<div class="head"><h3>Vista previa — ' + importedRows.length + ' producto' + (importedRows.length===1?'':'s') + '</h3>' +
+          '<button class="btn small primary" type="button" id="apply-import-btn">Aplicar a la noche</button></div>' +
+        '<div style="overflow-x:auto;"><table class="import-table"><thead><tr>' +
+          '<th>Producto</th><th class="num">Stock inicial</th><th class="num">Stock final</th><th class="num">Consumo</th><th class="num">Costo u.</th><th class="num">Costo total</th><th></th>' +
+        '</tr></thead><tbody>' +
+        importedRows.map(function(r, i){
+          var matched = !!r.producto_id;
+          return '<tr class="' + (matched ? '' : 'unmatched') + '">' +
+            '<td>' + escapeHtml(r.nombre) + (matched ? '' : ' <span title="No está en el catálogo">⚠️</span>') + '</td>' +
+            '<td class="num">' + intFmt(r.stock_inicial) + '</td>' +
+            '<td class="num">' + intFmt(r.stock_final) + '</td>' +
+            '<td class="num">' + intFmt(r.consumo) + '</td>' +
+            '<td class="num">' + money(r.costo_unitario) + '</td>' +
+            '<td class="num">' + money(r.costoTotal) + '</td>' +
+            '<td>' + (matched ? '' : '<button class="btn small ghost add-cat-btn" type="button" data-add-import-idx="' + i + '">+ Catálogo</button>') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>' +
+        '<div class="import-total"><span>Costo total de mercadería (esta planilla)</span><span class="num">' + money(total) + '</span></div>' +
+        (unmatchedCount ? '<p class="import-status warn">' + unmatchedCount + ' producto' + (unmatchedCount===1?' no está':'s no están') + ' en el catálogo — agregalo' + (unmatchedCount===1?'':'s') + ' con el botón antes de aplicar, o quedan afuera.</p>' : '<p class="import-status">Todos los productos coinciden con el catálogo.</p>') +
+      '</div>';
+  }
+  async function addImportedRowToCatalog(idx){
+    var row = importedRows[idx];
+    if (!row || row.producto_id) return;
+    var btn = document.querySelector('[data-add-import-idx="' + idx + '"]');
+    if (btn){ btn.disabled = true; btn.textContent = '…'; }
+    try{
+      var ins = await sb.from('productos_barra').insert({ nombre: row.nombre, costo_unitario: num(row.costo_unitario), activo:true }).select().single();
+      if (ins.error) throw ins.error;
+      STATE.productos.push(ins.data);
+      STATE.productos.sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+      row.producto_id = ins.data.id;
+      renderProductos();
+      renderImportPreview();
+    } catch(err){
+      alert('No se pudo agregar al catálogo: ' + (err && err.message ? err.message : 'error desconocido'));
+      if (btn){ btn.disabled = false; btn.textContent = '+ Catálogo'; }
+    }
+  }
+  function applyImportedRows(){
+    var matched = importedRows.filter(function(r){ return r.producto_id; });
+    if (!matched.length){ alert('No hay productos del catálogo para aplicar todavía.'); return; }
+    matched.forEach(function(r){
+      var existing = nightDraft.barra.find(function(b){ return b.producto_id === r.producto_id; });
+      if (existing){
+        existing.stock_inicial = r.stock_inicial; existing.stock_final = r.stock_final; existing.costo_unitario = r.costo_unitario;
+      } else {
+        nightDraft.barra.push({ producto_id: r.producto_id, costo_unitario: r.costo_unitario, stock_inicial: r.stock_inicial, stock_final: r.stock_final });
+      }
+    });
+    importedRows = [];
+    renderImportPreview();
+    renderBarra(); renderFormPreview();
+    document.getElementById('barra-import-file').value = '';
+  }
+
   function renderFormPreview(){
     var m = computeEventMetrics(nightDraft, STATE.periodo || { sadaic_pct:0, iibb_pct:0 });
     var status = computeStatus(m.contribution, m.totalRevenue, STATE.periodo ? STATE.periodo.margen_pct : 12);
@@ -1218,6 +1364,18 @@
     var first = STATE.productos[0];
     nightDraft.barra.push({ producto_id: first ? first.id : null, costo_unitario: first ? first.costo_unitario : 0, stock_inicial:0, stock_final:0 });
     renderBarra(); renderFormPreview();
+  });
+
+  // ---------- events: importar planilla de stock ----------
+  document.getElementById('download-template-btn').addEventListener('click', downloadStockTemplate);
+  document.getElementById('barra-import-file').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if (file) handleStockFile(file);
+  });
+  document.getElementById('barra-import-preview').addEventListener('click', function(e){
+    var addBtn = e.target.closest('[data-add-import-idx]');
+    if (addBtn){ addImportedRowToCatalog(parseInt(addBtn.getAttribute('data-add-import-idx'), 10)); return; }
+    if (e.target.id === 'apply-import-btn') applyImportedRows();
   });
 
   // ---------- events: night form fields ----------
