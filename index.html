@@ -1,9 +1,4 @@
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Consola Yamandú</title>
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Consola Yamandú</title>
 <style>
   :root{
     color-scheme: dark;
@@ -149,6 +144,8 @@
   .lineitem-row.gasto{ grid-template-columns: 1fr 1.3fr .9fr 32px; }
   .lineitem-row.barra{ grid-template-columns: 1.2fr .8fr .8fr .8fr 32px; }
   .lineitem-row.fc{ grid-template-columns: 1fr 140px 32px; }
+  .lineitem-row.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; }
+  .lineitem-head.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; margin-top:0; }
   .lineitem-row input, .lineitem-row select{ background: var(--ink-900); border:1px solid var(--hairline-strong); color:var(--paper);
     border-radius:7px; padding:7px 9px; font-size:.82rem; width:100%; }
   .lineitem-row .rm{ width:30px; height:30px; border-radius:7px; border:1px solid var(--hairline-strong); background:var(--ink-800);
@@ -247,16 +244,14 @@
     header.top{ flex-direction:column; }
     .evento-card .row1{ grid-template-columns:6px 1fr; }
     .evento-card .right{ grid-column: 1 / -1; justify-content:space-between; margin-top:6px; }
-    .lineitem-row.lote, .lineitem-row.gasto, .lineitem-row.barra{ grid-template-columns:1fr; }
+    .lineitem-row.lote, .lineitem-row.gasto, .lineitem-row.barra, .lineitem-row.prod{ grid-template-columns:1fr; }
     .lineitem-head{ display:none; }
   }
 </style>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
+</head><body><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- ================= LOGIN SCREEN ================= -->
@@ -427,9 +422,16 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><div><h2>Catálogo de productos de barra</h2><p class="hint">Nombre y costo unitario de cada producto. Se usan al cargar stock inicial/final por noche.</p></div></div>
+        <div class="panel-head"><div><h2>Catálogo de productos de barra</h2><p class="hint">Nombre, costo unitario y litros (opcional, informativo) de cada producto. Se usan al cargar stock inicial/final por noche.</p></div></div>
         <div id="productos-list"></div>
-        <button class="btn small" id="add-producto-btn" type="button">+ Agregar producto</button>
+        <div class="import-row">
+          <button class="btn small" id="add-producto-btn" type="button">+ Agregar producto</button>
+          <button class="btn small ghost" id="download-catalog-template-btn" type="button">⭳ Planilla modelo (Excel)</button>
+          <label class="btn small ghost" for="catalog-import-file">⭱ Importar planilla de catálogo</label>
+          <input type="file" id="catalog-import-file" accept=".xlsx,.xls,.csv" hidden>
+        </div>
+        <p class="hint" style="margin:8px 0 0;">La planilla necesita columnas <strong>Producto</strong> y <strong>Costo</strong>; <strong>Litros</strong> es opcional. Actualiza los productos que coincidan por nombre y da de alta los nuevos — no borra los que no aparezcan en el archivo.</p>
+        <div id="catalog-import-preview" hidden></div>
         <div class="form-actions"><button class="btn primary" id="save-productos-btn" type="button">Guardar catálogo</button></div>
       </div>
 
@@ -841,14 +843,17 @@
   function renderProductos(){
     var list = document.getElementById('productos-list');
     if (!STATE.productos.length){ list.innerHTML = '<p class="hint" style="margin:0 0 8px;">Todavía no cargaste productos.</p>'; return; }
-    list.innerHTML = STATE.productos.map(function(p, i){
-      return '<div class="lineitem-row fc">' +
+    list.innerHTML = '<div class="lineitem-head prod"><span>Producto</span><span>Costo u.</span><span>Litros</span><span></span></div>' +
+      STATE.productos.map(function(p, i){
+      return '<div class="lineitem-row prod">' +
         '<input type="text" value="' + escapeHtml(p.nombre) + '" data-prod-field="nombre" data-prod-idx="' + i + '" placeholder="Producto">' +
         '<input type="number" min="0" step="1" value="' + (p.costo_unitario||0) + '" data-prod-field="costo_unitario" data-prod-idx="' + i + '" placeholder="Costo u.">' +
+        '<input type="number" min="0" step="0.01" value="' + (p.litros==null ? '' : p.litros) + '" data-prod-field="litros" data-prod-idx="' + i + '" placeholder="Litros">' +
         '<button type="button" class="rm" data-prod-remove="' + i + '" title="Quitar">×</button>' +
       '</div>';
     }).join('');
   }
+  function litrosFmt(n){ return new Intl.NumberFormat('es-AR', { maximumFractionDigits:2 }).format(n); }
 
   // ---------- rendering: form sub-lists (lotes / gastos / barra) ----------
   function renderLotes(){
@@ -1028,6 +1033,103 @@
     renderImportPreview();
     renderBarra(); renderFormPreview();
     document.getElementById('barra-import-file').value = '';
+  }
+
+  // ---------- importar planilla de catálogo (Excel) ----------
+  var catalogImportRows = [];
+  function downloadCatalogTemplate(){
+    if (typeof XLSX === 'undefined'){ alert('No se pudo cargar la librería de Excel. Probá de nuevo en un momento.'); return; }
+    var rows = STATE.productos.length
+      ? STATE.productos.map(function(p){ return { 'Producto': p.nombre, 'Costo': p.costo_unitario || 0, 'Litros': p.litros==null ? '' : p.litros }; })
+      : [{ 'Producto': '', 'Costo': '', 'Litros': '' }];
+    var ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 26 }, { wch: 12 }, { wch: 10 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Catalogo');
+    XLSX.writeFile(wb, 'catalogo-barra.xlsx');
+  }
+  function handleCatalogFile(file){
+    if (typeof XLSX === 'undefined'){ alert('No se pudo cargar la librería de Excel. Probá de nuevo en un momento.'); return; }
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, { type:'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var json = XLSX.utils.sheet_to_json(ws, { defval:'' });
+        catalogImportRows = json.map(function(row){
+          var kNombre = findColKey(row, ['producto','nombre','item','articulo']);
+          var kCosto = findColKey(row, ['costo','costo unitario','costo u','costo u.','precio']);
+          var kLitros = findColKey(row, ['litros','litro','volumen','volumen unitario','liters','litres']);
+          var nombre = kNombre ? String(row[kNombre]).trim() : '';
+          var costo = num(kCosto ? row[kCosto] : 0);
+          var litrosRaw = kLitros ? row[kLitros] : '';
+          var litros = (litrosRaw === '' || litrosRaw == null) ? null : num(litrosRaw);
+          var match = STATE.productos.find(function(p){ return normName(p.nombre) === normName(nombre); });
+          return {
+            nombre: nombre, costo: costo, litros: litros,
+            producto_id: match ? match.id : null,
+            costoAnterior: match ? match.costo_unitario : null,
+            litrosAnterior: match ? match.litros : null,
+            isNew: !match
+          };
+        }).filter(function(r){ return r.nombre !== ''; });
+        renderCatalogImportPreview();
+      } catch(err){
+        alert('No se pudo leer el archivo: ' + (err && err.message ? err.message : 'error desconocido'));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  function renderCatalogImportPreview(){
+    var box = document.getElementById('catalog-import-preview');
+    if (!catalogImportRows.length){ box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    var nuevos = catalogImportRows.filter(function(r){ return r.isNew; }).length;
+    var actualiza = catalogImportRows.length - nuevos;
+    var rowsHtml = catalogImportRows.map(function(r){
+      var estado = r.isNew ? '<span class="chip good">Nuevo</span>' : '<span class="chip warning">Actualiza</span>';
+      var costoCell = r.isNew ? money(r.costo) : (money(r.costoAnterior||0) + ' → ' + money(r.costo));
+      var litrosCell = r.litros==null ? '—' : litrosFmt(r.litros);
+      return '<tr' + (r.isNew ? ' class="unmatched"' : '') + '><td>' + escapeHtml(r.nombre) + '</td><td>' + estado + '</td><td class="num">' + costoCell + '</td><td class="num">' + litrosCell + '</td></tr>';
+    }).join('');
+    box.innerHTML =
+      '<div class="import-preview">' +
+        '<div style="overflow-x:auto;"><table class="import-table"><thead><tr>' +
+          '<th>Producto</th><th>Estado</th><th>Costo</th><th>Litros</th>' +
+        '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' +
+        '<p class="import-status">' + catalogImportRows.length + ' producto' + (catalogImportRows.length===1?'':'s') + ' en el archivo — ' + nuevos + ' nuevo' + (nuevos===1?'':'s') + ', ' + actualiza + ' a actualizar. Los productos del catálogo que no están en el archivo no se tocan.</p>' +
+        '<div class="form-actions">' +
+          '<button class="btn primary small" type="button" id="apply-catalog-import-btn">Aplicar al catálogo</button> ' +
+          '<button class="btn ghost small" type="button" id="cancel-catalog-import-btn">Cancelar</button>' +
+        '</div>' +
+      '</div>';
+  }
+  async function applyCatalogImport(){
+    var btn = document.getElementById('apply-catalog-import-btn');
+    if (btn){ btn.disabled = true; btn.textContent = 'Aplicando…'; }
+    try{
+      var toInsert = catalogImportRows.filter(function(r){ return r.isNew; })
+        .map(function(r){ return { nombre:r.nombre, costo_unitario:r.costo, litros:r.litros, activo:true }; });
+      var toUpdate = catalogImportRows.filter(function(r){ return !r.isNew; });
+      if (toInsert.length){ var ins = await sb.from('productos_barra').insert(toInsert); if (ins.error) throw ins.error; }
+      for (var i=0;i<toUpdate.length;i++){
+        var r = toUpdate[i];
+        var upd = await sb.from('productos_barra').update({ costo_unitario:r.costo, litros:r.litros }).eq('id', r.producto_id);
+        if (upd.error) throw upd.error;
+      }
+      var prodRes = await sb.from('productos_barra').select('*').eq('activo', true).order('nombre', { ascending:true });
+      if (prodRes.error) throw prodRes.error;
+      STATE.productos = prodRes.data || [];
+      catalogImportRows = [];
+      document.getElementById('catalog-import-file').value = '';
+      renderProductos(); renderBarra();
+      var box = document.getElementById('catalog-import-preview'); box.hidden = true; box.innerHTML = '';
+    } catch(err){
+      showError('No se pudo importar el catálogo: ' + (err && err.message ? err.message : 'error desconocido'));
+    } finally {
+      if (btn){ btn.disabled = false; btn.textContent = 'Aplicar al catálogo'; }
+    }
   }
 
   function renderFormPreview(){
@@ -1268,7 +1370,9 @@
     var t = e.target; var idx = t.getAttribute('data-prod-idx'); if (idx===null) return;
     idx = parseInt(idx,10);
     var field = t.getAttribute('data-prod-field');
-    STATE.productos[idx][field] = field==='costo_unitario' ? num(t.value) : t.value;
+    if (field === 'costo_unitario') STATE.productos[idx][field] = num(t.value);
+    else if (field === 'litros') STATE.productos[idx][field] = t.value.trim()==='' ? null : num(t.value);
+    else STATE.productos[idx][field] = t.value;
   });
   document.getElementById('productos-list').addEventListener('click', function(e){
     var t = e.target.closest('[data-prod-remove]'); if (!t) return;
@@ -1279,19 +1383,19 @@
     renderProductos();
   });
   document.getElementById('add-producto-btn').addEventListener('click', function(){
-    STATE.productos.push({ id:null, nombre:'', costo_unitario:0, activo:true });
+    STATE.productos.push({ id:null, nombre:'', costo_unitario:0, litros:null, activo:true });
     renderProductos();
   });
   document.getElementById('save-productos-btn').addEventListener('click', async function(){
     var btn = this; btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Guardando…';
     try{
       var rows = STATE.productos.filter(function(p){ return (p.nombre||'').trim() !== ''; });
-      var toInsert = rows.filter(function(p){ return !p.id; }).map(function(p){ return { nombre:p.nombre, costo_unitario:num(p.costo_unitario), activo:true }; });
+      var toInsert = rows.filter(function(p){ return !p.id; }).map(function(p){ return { nombre:p.nombre, costo_unitario:num(p.costo_unitario), litros:(p.litros==null||p.litros==='')?null:num(p.litros), activo:true }; });
       var toUpdate = rows.filter(function(p){ return p.id; });
       if (toInsert.length){ var insRes = await sb.from('productos_barra').insert(toInsert); if (insRes.error) throw insRes.error; }
       for (var i=0;i<toUpdate.length;i++){
         var r = toUpdate[i];
-        var upd = await sb.from('productos_barra').update({ nombre:r.nombre, costo_unitario:num(r.costo_unitario) }).eq('id', r.id);
+        var upd = await sb.from('productos_barra').update({ nombre:r.nombre, costo_unitario:num(r.costo_unitario), litros:(r.litros==null||r.litros==='')?null:num(r.litros) }).eq('id', r.id);
         if (upd.error) throw upd.error;
       }
       for (var j=0;j<productosRemovedIds.length;j++){
@@ -1376,6 +1480,22 @@
     var addBtn = e.target.closest('[data-add-import-idx]');
     if (addBtn){ addImportedRowToCatalog(parseInt(addBtn.getAttribute('data-add-import-idx'), 10)); return; }
     if (e.target.id === 'apply-import-btn') applyImportedRows();
+  });
+
+  // ---------- events: importar planilla de catálogo ----------
+  document.getElementById('download-catalog-template-btn').addEventListener('click', downloadCatalogTemplate);
+  document.getElementById('catalog-import-file').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if (file) handleCatalogFile(file);
+  });
+  document.getElementById('catalog-import-preview').addEventListener('click', function(e){
+    if (e.target.id === 'apply-catalog-import-btn'){ applyCatalogImport(); return; }
+    if (e.target.id === 'cancel-catalog-import-btn'){
+      catalogImportRows = [];
+      var box = document.getElementById('catalog-import-preview');
+      box.hidden = true; box.innerHTML = '';
+      document.getElementById('catalog-import-file').value = '';
+    }
   });
 
   // ---------- events: night form fields ----------
@@ -1471,5 +1591,4 @@
   initAuth();
 })();
 </script>
-</body>
-</html>
+</body></html>
