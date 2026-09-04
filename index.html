@@ -204,6 +204,12 @@
   .evento-card .net.good{ color:var(--good); } .evento-card .net.warning{ color:var(--warning); } .evento-card .net.critical{ color:var(--critical); }
   .evento-card .actions{ display:flex; gap:6px; }
   .evento-card .fijo-note{ font-size:.72rem; color:var(--paper-mute); margin-top:6px; padding-left:20px; }
+  .evento-breakdown{ display:flex; flex-wrap:wrap; gap:5px 20px; margin-top:10px; padding-top:10px;
+    border-top:1px dashed var(--hairline-strong); padding-left:20px; }
+  .evento-breakdown .item{ font-size:.78rem; display:flex; align-items:baseline; gap:5px; }
+  .evento-breakdown .lbl{ color:var(--paper-mute); }
+  .evento-breakdown .num{ font-family:"JetBrains Mono",monospace; font-weight:600; color:var(--paper); }
+  .evento-breakdown .num.good{ color:var(--good); } .evento-breakdown .num.warning{ color:var(--warning); } .evento-breakdown .num.critical{ color:var(--critical); }
   .empty-state{ text-align:center; padding:34px 16px; color:var(--paper-mute); font-size:.9rem; }
   .empty-state .big{ font-size:1.8rem; margin-bottom:8px; }
 
@@ -786,7 +792,7 @@
       '<div class="kpi">' +
         '<div class="lbl">Fijo del mes pendiente</div>' +
         '<div class="val">' + money(agg.fijoPendiente) + '</div>' +
-        '<div class="sub">de ' + money(fijoTotal) + ' totales</div>' +
+        '<div class="sub">' + money(Math.max(0, fijoTotal - agg.fijoPendiente)) + ' ya cubierto de ' + money(fijoTotal) + '</div>' +
       '</div>' +
       '<div class="kpi">' +
         '<div class="lbl">Noches registradas</div>' +
@@ -1187,6 +1193,12 @@
               '<button class="btn small danger" type="button" data-delete-evento="' + e.id + '">Eliminar</button>' +
             '</div>' +
           '</div>' +
+        '</div>' +
+        '<div class="evento-breakdown">' +
+          '<span class="item"><span class="lbl">Ingresos totales</span><span class="num">' + money(e.totalRevenue) + '</span></span>' +
+          '<span class="item"><span class="lbl">Gastos + impuestos de la noche</span><span class="num">' + money(e.variableCost + e.tax) + '</span></span>' +
+          '<span class="item"><span class="lbl">Fijo mensual absorbido</span><span class="num">' + money(e.fijoAbsorbido) + '</span></span>' +
+          '<span class="item"><span class="lbl">Resultado final de la noche</span><span class="num ' + st + '">' + moneySigned(e.net) + '</span></span>' +
         '</div>' +
         '<div class="fijo-note">' + fijoNote + '</div>' +
       '</div>';
