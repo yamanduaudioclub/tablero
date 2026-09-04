@@ -1,4 +1,13 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Consola Yamandú</title>
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consola Yamandú</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#a9673a">
+<title>Consola Yamandú</title>
 <style>
   :root{
     color-scheme: dark;
@@ -140,7 +149,8 @@
   .span2{ grid-column: 1 / -1; }
 
   .lineitem-row{ display:grid; gap:8px; align-items:center; margin-bottom:8px; }
-  .lineitem-row.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr 32px; }
+  .lineitem-row.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr .9fr 32px; }
+  .lineitem-row.lote .lote-subtotal{ font-size:.82rem; color:var(--paper-dim); text-align:right; padding:7px 4px; white-space:nowrap; }
   .lineitem-row.gasto{ grid-template-columns: 1fr 1.3fr .9fr 32px; }
   .lineitem-row.barra{ grid-template-columns: 1.2fr .8fr .8fr .8fr 32px; }
   .lineitem-row.fc{ grid-template-columns: 1fr 140px 32px; }
@@ -152,7 +162,7 @@
     color:var(--paper-mute); cursor:pointer; font-size:.9rem; line-height:1; }
   .lineitem-row .rm:hover{ color:#ffb3ae; border-color:rgba(230,86,79,.4); }
   .lineitem-head{ display:grid; gap:8px; font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--paper-mute); margin-bottom:6px; }
-  .lineitem-head.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr 32px; }
+  .lineitem-head.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr .9fr 32px; }
   .lineitem-head.gasto{ grid-template-columns: 1fr 1.3fr .9fr 32px; }
   .lineitem-head.barra{ grid-template-columns: 1.2fr .8fr .8fr .8fr 32px; }
   .lineitem-total{ display:flex; justify-content:space-between; padding-top:8px; margin-top:4px; border-top:1px dashed var(--hairline-strong); font-size:.85rem; color:var(--paper-dim); }
@@ -257,9 +267,10 @@
   }
 </style>
 
+</head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head><body><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- ================= LOGIN SCREEN ================= -->
@@ -346,9 +357,10 @@
         <div style="margin-top:18px;">
           <span class="subhead">Lotes de entradas</span>
           <p class="hint" style="margin:2px 0 10px;">Un renglón por lote (como en Passline): general, VIP, lote 2, aguante, etc.</p>
-          <div class="lineitem-head lote" id="lotes-head" hidden><span>Lote</span><span>Tipo</span><span>Precio</span><span>Cant.</span><span></span></div>
+          <div class="lineitem-head lote" id="lotes-head" hidden><span>Lote</span><span>Tipo</span><span>Precio</span><span>Cant.</span><span>Subtotal</span><span></span></div>
           <div id="night-lotes"></div>
           <button class="btn small" id="add-lote-btn" type="button">+ Agregar lote</button>
+          <div class="lineitem-total" id="lotes-total-row" hidden><span>Total entradas</span><span class="num" id="lotes-total">$0</span></div>
         </div>
 
         <div style="margin-top:18px;">
@@ -869,12 +881,21 @@
   function litrosFmt(n){ return new Intl.NumberFormat('es-AR', { maximumFractionDigits:2 }).format(n); }
 
   // ---------- rendering: form sub-lists (lotes / gastos / barra) ----------
+  function lotesTotal(){
+    return nightDraft.lotes.reduce(function(s,l){ return s + num(l.precio)*num(l.cantidad); }, 0);
+  }
+  function updateLotesTotalRow(){
+    var row = document.getElementById('lotes-total-row');
+    row.hidden = !nightDraft.lotes.length;
+    document.getElementById('lotes-total').textContent = money(lotesTotal());
+  }
   function renderLotes(){
     var head = document.getElementById('lotes-head');
     var list = document.getElementById('night-lotes');
-    if (!nightDraft.lotes.length){ head.hidden = true; list.innerHTML = '<p class="hint" style="margin:0 0 8px;">Sin lotes cargados.</p>'; return; }
+    if (!nightDraft.lotes.length){ head.hidden = true; list.innerHTML = '<p class="hint" style="margin:0 0 8px;">Sin lotes cargados.</p>'; updateLotesTotalRow(); return; }
     head.hidden = false;
     list.innerHTML = nightDraft.lotes.map(function(l, i){
+      var subtotal = num(l.precio) * num(l.cantidad);
       return '<div class="lineitem-row lote">' +
         '<input type="text" value="' + escapeHtml(l.nombre_lote) + '" data-lote-field="nombre_lote" data-lote-idx="' + i + '" placeholder="Ej: Lote 1 General">' +
         '<select data-lote-field="tipo" data-lote-idx="' + i + '">' +
@@ -885,9 +906,11 @@
         '</select>' +
         '<input type="number" min="0" step="1" value="' + (l.precio||0) + '" data-lote-field="precio" data-lote-idx="' + i + '" placeholder="Precio">' +
         '<input type="number" min="0" step="1" value="' + (l.cantidad||0) + '" data-lote-field="cantidad" data-lote-idx="' + i + '" placeholder="Cant.">' +
+        '<span class="lote-subtotal num" title="Precio × cantidad">= ' + money(subtotal) + '</span>' +
         '<button type="button" class="rm" data-lote-remove="' + i + '" title="Quitar">×</button>' +
       '</div>';
     }).join('');
+    updateLotesTotalRow();
   }
   function renderGastos(){
     var head = document.getElementById('gastos-head');
@@ -1468,6 +1491,12 @@
     var t = e.target; var idx = t.getAttribute('data-lote-idx'); if (idx===null) return;
     idx = parseInt(idx,10); var field = t.getAttribute('data-lote-field');
     nightDraft.lotes[idx][field] = (field==='precio'||field==='cantidad') ? num(t.value) : t.value;
+    if (field==='precio' || field==='cantidad'){
+      var row = t.closest('.lineitem-row.lote');
+      var subEl = row && row.querySelector('.lote-subtotal');
+      if (subEl) subEl.textContent = '= ' + money(num(nightDraft.lotes[idx].precio) * num(nightDraft.lotes[idx].cantidad));
+      updateLotesTotalRow();
+    }
     renderFormPreview();
   });
   document.getElementById('night-lotes').addEventListener('click', function(e){
@@ -1643,4 +1672,5 @@
   initAuth();
 })();
 </script>
+
 </body></html>
