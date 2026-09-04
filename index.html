@@ -169,6 +169,8 @@
   .import-table tr.unmatched td{ color:var(--warning); }
   .import-table .num{ text-align:right; }
   .import-table .add-cat-btn{ font-size:.7rem; padding:3px 8px; }
+  .import-table tr.ledger-start td{ color:var(--paper-mute); font-style:italic; }
+  .import-table td.covered{ color:var(--good); font-weight:700; }
   .import-total{ display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed var(--hairline-strong); font-size:.86rem; }
   .import-total .num{ font-family:"JetBrains Mono",monospace; font-weight:700; color:var(--paper); }
   .import-status{ font-size:.78rem; color:var(--paper-mute); margin-top:6px; }
@@ -389,6 +391,11 @@
           <div><h2>Registro de noches</h2><p class="hint" id="eventos-count-hint"></p></div>
         </div>
         <div id="eventos-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div><h2>Descuento del fijo — mes completo</h2><p class="hint">Cómo cada noche va pagando el pozo de costo fijo del mes, en orden cronológico.</p></div></div>
+        <div id="fijo-ledger"></div>
       </div>
 
       <div class="panel">
@@ -1197,12 +1204,44 @@
         '<div class="evento-breakdown">' +
           '<span class="item"><span class="lbl">Ingresos totales</span><span class="num">' + money(e.totalRevenue) + '</span></span>' +
           '<span class="item"><span class="lbl">Gastos + impuestos de la noche</span><span class="num">' + money(e.variableCost + e.tax) + '</span></span>' +
+          '<span class="item"><span class="lbl">Resultado de la noche</span><span class="num">' + moneySigned(e.contribution) + '</span></span>' +
           '<span class="item"><span class="lbl">Fijo mensual absorbido</span><span class="num">' + money(e.fijoAbsorbido) + '</span></span>' +
-          '<span class="item"><span class="lbl">Resultado final de la noche</span><span class="num ' + st + '">' + moneySigned(e.net) + '</span></span>' +
+          '<span class="item"><span class="lbl">Resultado neto después del fijo</span><span class="num ' + st + '">' + moneySigned(e.net) + '</span></span>' +
         '</div>' +
         '<div class="fijo-note">' + fijoNote + '</div>' +
       '</div>';
     }).join('');
+  }
+
+  // ---------- rendering: fijo ledger (mes completo) ----------
+  function renderFijoLedger(){
+    var el = document.getElementById('fijo-ledger');
+    var fijoTotal = STATE.periodo ? STATE.periodo.fijo_total : 0;
+    var evs = computedEventos(); // ya viene en orden cronológico ascendente
+    if (!evs.length){
+      el.innerHTML = '<p class="hint" style="margin:0;">Todavía no hay noches este mes — el pozo de fijo arranca en ' + money(fijoTotal) + '.</p>';
+      return;
+    }
+    var rowsHtml = evs.map(function(e){
+      var restanteCell = e.fijoRestanteDespues <= 0 ? ' class="num covered"' : ' class="num"';
+      return '<tr>' +
+        '<td>' + dateShort(e.fecha) + '</td>' +
+        '<td>' + escapeHtml(e.nombre || '(sin nombre)') + '</td>' +
+        '<td class="num">' + moneySigned(e.contribution) + '</td>' +
+        '<td class="num">' + money(e.fijoAbsorbido) + '</td>' +
+        '<td' + restanteCell + '>' + (e.fijoRestanteDespues <= 0 ? 'Cubierto' : money(e.fijoRestanteDespues)) + '</td>' +
+      '</tr>';
+    }).join('');
+    el.innerHTML =
+      '<div style="overflow-x:auto;">' +
+        '<table class="import-table">' +
+          '<thead><tr><th>Fecha</th><th>Evento</th><th>Resultado de la noche</th><th>Fijo absorbido</th><th>Fijo restante</th></tr></thead>' +
+          '<tbody>' +
+            '<tr class="ledger-start"><td colspan="4">Pozo inicial del mes</td><td class="num">' + money(fijoTotal) + '</td></tr>' +
+            rowsHtml +
+          '</tbody>' +
+        '</table>' +
+      '</div>';
   }
 
   // ---------- rendering: chart ----------
@@ -1303,6 +1342,7 @@
     renderFixedCosts();
     renderProductos();
     renderEventosList();
+    renderFijoLedger();
     renderChart();
     renderRubroBreakdown();
     renderSimulator();
