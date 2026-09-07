@@ -156,6 +156,7 @@
   .lineitem-row.fc{ grid-template-columns: 1fr 140px 32px; }
   .lineitem-row.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; }
   .lineitem-head.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; margin-top:0; }
+  .lineitem-row.medio{ grid-template-columns: 1fr 32px; }
   .lineitem-row input, .lineitem-row select{ background: var(--ink-900); border:1px solid var(--hairline-strong); color:var(--paper);
     border-radius:7px; padding:7px 9px; font-size:.82rem; width:100%; }
   .lineitem-row .rm{ width:30px; height:30px; border-radius:7px; border:1px solid var(--hairline-strong); background:var(--ink-800);
@@ -181,6 +182,14 @@
   .import-table .add-cat-btn{ font-size:.7rem; padding:3px 8px; }
   .import-table tr.ledger-start td{ color:var(--paper-mute); font-style:italic; }
   .import-table td.covered{ color:var(--good); font-weight:700; }
+  .pay-matrix{ width:100%; border-collapse:collapse; font-size:.82rem; }
+  .pay-matrix th{ text-align:left; font-size:.66rem; text-transform:uppercase; letter-spacing:.04em; color:var(--paper-mute); padding:4px 8px; border-bottom:1px solid var(--hairline-strong); }
+  .pay-matrix td{ padding:6px 8px; border-bottom:1px solid var(--hairline); vertical-align:middle; min-width:96px; }
+  .pay-matrix td.num{ text-align:right; font-family:"JetBrains Mono",monospace; }
+  .pay-matrix input{ background: var(--ink-900); border:1px solid var(--hairline-strong); color:var(--paper);
+    border-radius:6px; padding:5px 7px; font-size:.82rem; width:100%; max-width:120px; }
+  .pay-matrix tfoot td{ font-weight:700; border-top:1px dashed var(--hairline-strong); border-bottom:none; color:var(--paper); }
+  .pay-matrix th .hint-inline{ text-transform:none; font-weight:400; letter-spacing:0; color:var(--paper-mute); }
   .import-total{ display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed var(--hairline-strong); font-size:.86rem; }
   .import-total .num{ font-family:"JetBrains Mono",monospace; font-weight:700; color:var(--paper); }
   .import-status{ font-size:.78rem; color:var(--paper-mute); margin-top:6px; }
@@ -350,8 +359,13 @@
         <div class="form-grid">
           <div class="field"><label for="f-date">Fecha</label><input type="date" id="f-date"></div>
           <div class="field"><label for="f-name">Evento / DJ</label><input type="text" id="f-name" placeholder="Ej: Noche de vinilo — Toffolini"></div>
-          <div class="field"><label for="f-bar">Ingreso de barra ($)</label><input type="number" min="0" step="1" id="f-bar" placeholder="0"></div>
-          <div class="field"><label for="f-staff">Costo de personal de la noche ($)</label><input type="number" min="0" step="1" id="f-staff" placeholder="0"></div>
+          <div class="field span2"><label for="f-staff">Costo de personal de la noche ($)</label><input type="number" min="0" step="1" id="f-staff" placeholder="0"></div>
+        </div>
+
+        <div style="margin-top:18px;">
+          <span class="subhead">Ingresos de la noche — por medio de pago</span>
+          <p class="hint" style="margin:2px 0 10px;">Gastronomía y Barra se suman al ingreso de la noche y afectan el resultado. Entradas es solo informativo — el ingreso de entradas para el cálculo sigue viniendo de los lotes de abajo.</p>
+          <div id="night-ingresos"></div>
         </div>
 
         <div style="margin-top:18px;">
@@ -461,6 +475,18 @@
       </div>
 
       <div class="panel">
+        <div class="panel-head"><div><h2>Medios de pago</h2><p class="hint">Formas de cobro que aparecen al cargar los ingresos de cada noche (Efectivo, tarjetas, Mercado Pago, Passline, etc.)</p></div></div>
+        <div id="medios-pago-list"></div>
+        <button class="btn small" id="add-medio-pago-btn" type="button">+ Agregar medio de pago</button>
+        <div class="form-actions"><button class="btn primary" id="save-medios-pago-btn" type="button">Guardar medios de pago</button></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div><h2>Ingresos por medio de pago — este mes</h2><p class="hint">Efectivo, tarjetas y Mercado Pago sumados entre todas las noches (incluye entradas, gastronomía y barra) — para cotejar contra depósitos.</p></div></div>
+        <div id="ingresos-breakdown"></div>
+      </div>
+
+      <div class="panel">
         <div class="panel-head"><div><h2>Gasto por rubro — este mes</h2><p class="hint">Personal, ambientación, técnica y demás, sumado entre todas las noches.</p></div></div>
         <div id="rubro-breakdown"></div>
       </div>
@@ -515,16 +541,20 @@
     costosFijos: [],
     categorias: [],
     productos: [],
+    mediosPago: [],
     eventos: []
   };
   var editingEventoId = null;
   var nightDraft = blankNight();
   var booted = false;
   var productosRemovedIds = [];
+  var mediosPagoRemovedIds = [];
+  var INGRESO_RUBROS = ['entradas', 'gastronomia', 'barra'];
+  var INGRESO_RUBRO_LABEL = { entradas:'Entradas', gastronomia:'Gastronomía', barra:'Barra' };
 
   function blankNight(){
-    return { id:null, fecha:'', nombre:'', ingreso_barra:'', personal_costo:'', notas:'',
-      lotes:[], gastos:[], barra:[] };
+    return { id:null, fecha:'', nombre:'', personal_costo:'', notas:'',
+      lotes:[], gastos:[], barra:[], ingresos:[] };
   }
 
   // ---------- date / month helpers ----------
@@ -572,8 +602,10 @@
   // ---------- pure calc (mirrors calc_test.js) ----------
   function computeEventMetrics(evento, periodo){
     var ticketRevenue = (evento.lotes||[]).reduce(function(s,l){ return s + num(l.precio)*num(l.cantidad); }, 0);
-    var barRevenue = num(evento.ingreso_barra);
-    var totalRevenue = ticketRevenue + barRevenue;
+    var ingresos = evento.ingresos || [];
+    var gastroRevenue = ingresos.reduce(function(s,i){ return s + (i.rubro==='gastronomia' ? num(i.monto) : 0); }, 0);
+    var barraRevenue = ingresos.reduce(function(s,i){ return s + (i.rubro==='barra' ? num(i.monto) : 0); }, 0);
+    var totalRevenue = ticketRevenue + gastroRevenue + barraRevenue;
     var gastosTotal = (evento.gastos||[]).reduce(function(s,g){ return s + num(g.monto); }, 0);
     var barraCosto = (evento.barra||[]).reduce(function(s,b){
       return s + Math.max(0, num(b.stock_inicial) - num(b.stock_final)) * num(b.costo_unitario);
@@ -583,7 +615,7 @@
     var taxPct = (num(periodo.sadaic_pct) + num(periodo.iibb_pct)) / 100;
     var tax = totalRevenue * taxPct;
     var contribution = totalRevenue - variableCost - tax;
-    return { ticketRevenue:ticketRevenue, barRevenue:barRevenue, totalRevenue:totalRevenue, gastosTotal:gastosTotal,
+    return { ticketRevenue:ticketRevenue, gastroRevenue:gastroRevenue, barraRevenue:barraRevenue, totalRevenue:totalRevenue, gastosTotal:gastosTotal,
       barraCosto:barraCosto, personalCosto:personalCosto, variableCost:variableCost, tax:tax, contribution:contribution };
   }
   function applyDynamicFixedDepletion(eventsSortedAsc, fijoTotal){
@@ -714,12 +746,15 @@
       var prodRes = await sb.from('productos_barra').select('*').eq('activo', true).order('nombre', { ascending:true });
       if (prodRes.error) throw prodRes.error;
 
+      var mpRes = await sb.from('medios_pago').select('*').eq('activo', true).order('orden', { ascending:true });
+      if (mpRes.error) throw mpRes.error;
+
       var evRes = await sb.from('eventos').select('*').gte('fecha', range.start).lt('fecha', range.end).order('fecha', { ascending:true });
       if (evRes.error) throw evRes.error;
       var eventos = evRes.data || [];
       var ids = eventos.map(function(e){ return e.id; });
 
-      var lotesByEvento = {}, gastosByEvento = {}, barraByEvento = {};
+      var lotesByEvento = {}, gastosByEvento = {}, barraByEvento = {}, ingresosByEvento = {};
       if (ids.length){
         var lotesRes = await sb.from('entradas_lotes').select('*').in('evento_id', ids).order('orden', { ascending:true });
         if (lotesRes.error) throw lotesRes.error;
@@ -732,17 +767,23 @@
         var barraRes = await sb.from('barra_movimientos').select('*').in('evento_id', ids);
         if (barraRes.error) throw barraRes.error;
         (barraRes.data||[]).forEach(function(b){ (barraByEvento[b.evento_id] = barraByEvento[b.evento_id]||[]).push(b); });
+
+        var ingresosRes = await sb.from('ingresos_evento').select('*').in('evento_id', ids);
+        if (ingresosRes.error) throw ingresosRes.error;
+        (ingresosRes.data||[]).forEach(function(i){ (ingresosByEvento[i.evento_id] = ingresosByEvento[i.evento_id]||[]).push(i); });
       }
       eventos.forEach(function(e){
         e.lotes = lotesByEvento[e.id] || [];
         e.gastos = gastosByEvento[e.id] || [];
         e.barra = barraByEvento[e.id] || [];
+        e.ingresos = ingresosByEvento[e.id] || [];
       });
 
       STATE.periodo = periodo;
       STATE.costosFijos = fcRes.data || [];
       STATE.categorias = catRes.data || [];
       STATE.productos = prodRes.data || [];
+      STATE.mediosPago = mpRes.data || [];
       STATE.eventos = eventos;
     } catch(err){
       showError('No se pudieron cargar los datos: ' + (err && err.message ? err.message : 'error desconocido'));
@@ -879,6 +920,86 @@
     }).join('');
   }
   function litrosFmt(n){ return new Intl.NumberFormat('es-AR', { maximumFractionDigits:2 }).format(n); }
+
+  function renderMediosPago(){
+    var list = document.getElementById('medios-pago-list');
+    if (!STATE.mediosPago.length){ list.innerHTML = '<p class="hint" style="margin:0 0 8px;">Todavía no cargaste medios de pago.</p>'; return; }
+    list.innerHTML = STATE.mediosPago.map(function(m, i){
+      return '<div class="lineitem-row medio">' +
+        '<input type="text" value="' + escapeHtml(m.nombre) + '" data-medio-field="nombre" data-medio-idx="' + i + '" placeholder="Nombre">' +
+        '<button type="button" class="rm" data-medio-remove="' + i + '" title="Quitar">×</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ---------- ingresos de la noche (por rubro x medio de pago) ----------
+  function ensureIngresosRows(){
+    if (!nightDraft.ingresos) nightDraft.ingresos = [];
+    var existingKeys = {};
+    nightDraft.ingresos.forEach(function(row){ existingKeys[row.rubro + '|' + row.medio_pago_id] = true; });
+    var activos = STATE.mediosPago.filter(function(m){ return m.activo; });
+    INGRESO_RUBROS.forEach(function(rubro){
+      activos.forEach(function(m){
+        var key = rubro + '|' + m.id;
+        if (!existingKeys[key]) nightDraft.ingresos.push({ rubro:rubro, medio_pago_id:m.id, monto:0 });
+      });
+    });
+  }
+  function ingresosTotalsByRubro(){
+    var totals = { entradas:0, gastronomia:0, barra:0 };
+    (nightDraft.ingresos||[]).forEach(function(r){ totals[r.rubro] = (totals[r.rubro]||0) + num(r.monto); });
+    return totals;
+  }
+  function updateIngresosTotals(){
+    var t = ingresosTotalsByRubro();
+    var elE = document.getElementById('ingresos-total-entradas');
+    var elG = document.getElementById('ingresos-total-gastro');
+    var elB = document.getElementById('ingresos-total-barra');
+    var elCalc = document.getElementById('ingresos-total-calc');
+    if (elE) elE.textContent = money(t.entradas);
+    if (elG) elG.textContent = money(t.gastronomia);
+    if (elB) elB.textContent = money(t.barra);
+    if (elCalc) elCalc.textContent = money(t.gastronomia + t.barra);
+  }
+  function renderIngresos(){
+    var el = document.getElementById('night-ingresos');
+    ensureIngresosRows();
+    var activos = STATE.mediosPago.filter(function(m){ return m.activo; });
+    if (!activos.length){
+      el.innerHTML = '<p class="hint" style="margin:0;">Todavía no hay medios de pago cargados — agregalos en el panel "Medios de pago" a la derecha.</p>';
+      return;
+    }
+    function cellIdx(rubro, medioId){
+      for (var i=0;i<nightDraft.ingresos.length;i++){
+        var r = nightDraft.ingresos[i];
+        if (r.rubro===rubro && r.medio_pago_id===medioId) return i;
+      }
+      return -1;
+    }
+    var rowsHtml = activos.map(function(m){
+      var iE = cellIdx('entradas', m.id), iG = cellIdx('gastronomia', m.id), iB = cellIdx('barra', m.id);
+      return '<tr>' +
+        '<td>' + escapeHtml(m.nombre) + '</td>' +
+        '<td><input type="number" min="0" step="1" value="' + (nightDraft.ingresos[iE].monto||0) + '" data-ingreso-idx="' + iE + '" placeholder="0"></td>' +
+        '<td><input type="number" min="0" step="1" value="' + (nightDraft.ingresos[iG].monto||0) + '" data-ingreso-idx="' + iG + '" placeholder="0"></td>' +
+        '<td><input type="number" min="0" step="1" value="' + (nightDraft.ingresos[iB].monto||0) + '" data-ingreso-idx="' + iB + '" placeholder="0"></td>' +
+      '</tr>';
+    }).join('');
+    var t = ingresosTotalsByRubro();
+    el.innerHTML =
+      '<div style="overflow-x:auto;">' +
+        '<table class="pay-matrix">' +
+          '<thead><tr><th>Medio de pago</th><th>Entradas <span class="hint-inline">(informativo)</span></th><th>Gastronomía</th><th>Barra</th></tr></thead>' +
+          '<tbody>' + rowsHtml + '</tbody>' +
+          '<tfoot><tr><td>Total</td>' +
+            '<td class="num" id="ingresos-total-entradas">' + money(t.entradas) + '</td>' +
+            '<td class="num" id="ingresos-total-gastro">' + money(t.gastronomia) + '</td>' +
+            '<td class="num" id="ingresos-total-barra">' + money(t.barra) + '</td>' +
+          '</tr></tfoot>' +
+        '</table>' +
+      '</div>' +
+      '<p class="hint" style="margin:8px 0 0;">Gastronomía + Barra usados en el cálculo de la noche: <strong id="ingresos-total-calc">' + money(t.gastronomia + t.barra) + '</strong></p>';
+  }
 
   // ---------- rendering: form sub-lists (lotes / gastos / barra) ----------
   function lotesTotal(){
@@ -1180,10 +1301,9 @@
   function loadDraftIntoForm(){
     document.getElementById('f-date').value = nightDraft.fecha || '';
     document.getElementById('f-name').value = nightDraft.nombre || '';
-    document.getElementById('f-bar').value = nightDraft.ingreso_barra === '' ? '' : nightDraft.ingreso_barra;
     document.getElementById('f-staff').value = nightDraft.personal_costo === '' ? '' : nightDraft.personal_costo;
     document.getElementById('f-notes').value = nightDraft.notas || '';
-    renderLotes(); renderGastos(); renderBarra(); renderFormPreview();
+    renderIngresos(); renderLotes(); renderGastos(); renderBarra(); renderFormPreview();
     document.getElementById('form-title').textContent = editingEventoId ? 'Editar noche' : 'Cargar noche';
     document.getElementById('cancel-edit-btn').hidden = !editingEventoId;
   }
@@ -1293,6 +1413,27 @@
     }).join('') + '</div>';
   }
 
+  // ---------- rendering: ingresos por medio de pago (mes completo) ----------
+  function renderIngresosBreakdown(){
+    var el = document.getElementById('ingresos-breakdown');
+    var totals = {};
+    STATE.mediosPago.forEach(function(m){ totals[m.id] = 0; });
+    STATE.eventos.forEach(function(e){
+      (e.ingresos||[]).forEach(function(i){
+        if (i.medio_pago_id != null) totals[i.medio_pago_id] = (totals[i.medio_pago_id]||0) + num(i.monto);
+      });
+    });
+    var rows = STATE.mediosPago.map(function(m){ return { nombre:m.nombre, total: totals[m.id]||0 }; }).filter(function(r){ return r.total > 0; });
+    if (!rows.length){ el.innerHTML = '<p class="hint">Todavía no cargaste ingresos por medio de pago este mes.</p>'; return; }
+    var max = Math.max.apply(null, rows.map(function(r){ return r.total; }));
+    el.innerHTML = rows.sort(function(a,b){ return b.total-a.total; }).map(function(r){
+      var pct = Math.max(4, Math.round(r.total/max*100));
+      return '<div class="rubro-row"><span class="name">' + escapeHtml(r.nombre) + '</span>' +
+        '<span class="track"><span class="fill" style="width:' + pct + '%"></span></span>' +
+        '<span class="amt">' + money(r.total) + '</span></div>';
+    }).join('');
+  }
+
   // ---------- rendering: rubro breakdown ----------
   function renderRubroBreakdown(){
     var el = document.getElementById('rubro-breakdown');
@@ -1364,9 +1505,12 @@
     renderPeriodoConfig();
     renderFixedCosts();
     renderProductos();
+    renderMediosPago();
+    renderIngresos();
     renderEventosList();
     renderFijoLedger();
     renderChart();
+    renderIngresosBreakdown();
     renderRubroBreakdown();
     renderSimulator();
     document.getElementById('last-updated').textContent = 'Mes: ' + monthLabel(STATE.monthId);
@@ -1579,8 +1723,61 @@
     }
   });
 
+  // ---------- events: medios de pago (catálogo) ----------
+  document.getElementById('medios-pago-list').addEventListener('input', function(e){
+    var t = e.target; var idx = t.getAttribute('data-medio-idx'); if (idx===null) return;
+    idx = parseInt(idx,10);
+    STATE.mediosPago[idx].nombre = t.value;
+  });
+  document.getElementById('medios-pago-list').addEventListener('click', function(e){
+    var t = e.target.closest('[data-medio-remove]'); if (!t) return;
+    var idx = parseInt(t.getAttribute('data-medio-remove'),10);
+    var m = STATE.mediosPago[idx];
+    if (m && m.id) mediosPagoRemovedIds.push(m.id);
+    STATE.mediosPago.splice(idx, 1);
+    renderMediosPago();
+  });
+  document.getElementById('add-medio-pago-btn').addEventListener('click', function(){
+    STATE.mediosPago.push({ id:null, nombre:'', orden: STATE.mediosPago.length, activo:true });
+    renderMediosPago();
+  });
+  document.getElementById('save-medios-pago-btn').addEventListener('click', async function(){
+    var btn = this; btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Guardando…';
+    try{
+      var rows = STATE.mediosPago.filter(function(m){ return (m.nombre||'').trim() !== ''; });
+      rows.forEach(function(m, i){ m.orden = i; });
+      var toInsert = rows.filter(function(m){ return !m.id; }).map(function(m){ return { nombre:m.nombre, orden:m.orden, activo:true }; });
+      var toUpdate = rows.filter(function(m){ return m.id; });
+      if (toInsert.length){ var insRes = await sb.from('medios_pago').insert(toInsert); if (insRes.error) throw insRes.error; }
+      for (var i=0;i<toUpdate.length;i++){
+        var r = toUpdate[i];
+        var upd = await sb.from('medios_pago').update({ nombre:r.nombre, orden:r.orden }).eq('id', r.id);
+        if (upd.error) throw upd.error;
+      }
+      for (var j=0;j<mediosPagoRemovedIds.length;j++){
+        var deact = await sb.from('medios_pago').update({ activo:false }).eq('id', mediosPagoRemovedIds[j]);
+        if (deact.error) throw deact.error;
+      }
+      mediosPagoRemovedIds = [];
+      var mpRes = await sb.from('medios_pago').select('*').eq('activo', true).order('orden', { ascending:true });
+      if (mpRes.error) throw mpRes.error;
+      STATE.mediosPago = mpRes.data || [];
+      renderMediosPago(); renderIngresos();
+    } catch(err){ showError('No se pudo guardar los medios de pago: ' + (err && err.message ? err.message : 'error desconocido')); }
+    finally{ btn.disabled = false; btn.textContent = orig; }
+  });
+
+  // ---------- events: night form — ingresos por medio de pago ----------
+  document.getElementById('night-ingresos').addEventListener('input', function(e){
+    var t = e.target; var idx = t.getAttribute('data-ingreso-idx'); if (idx===null) return;
+    idx = parseInt(idx,10);
+    nightDraft.ingresos[idx].monto = num(t.value);
+    updateIngresosTotals();
+    renderFormPreview();
+  });
+
   // ---------- events: night form fields ----------
-  var draftFieldMap = { 'f-date':'fecha', 'f-name':'nombre', 'f-bar':'ingreso_barra', 'f-staff':'personal_costo', 'f-notes':'notas' };
+  var draftFieldMap = { 'f-date':'fecha', 'f-name':'nombre', 'f-staff':'personal_costo', 'f-notes':'notas' };
   Object.keys(draftFieldMap).forEach(function(id){
     document.getElementById(id).addEventListener('input', function(e){
       nightDraft[draftFieldMap[id]] = e.target.value;
@@ -1598,7 +1795,7 @@
     try{
       var payload = {
         fecha: nightDraft.fecha, nombre: nightDraft.nombre,
-        ingreso_barra: num(nightDraft.ingreso_barra), personal_costo: num(nightDraft.personal_costo),
+        personal_costo: num(nightDraft.personal_costo),
         notas: nightDraft.notas || null
       };
       var eventoId;
@@ -1609,7 +1806,8 @@
         await Promise.all([
           sb.from('entradas_lotes').delete().eq('evento_id', eventoId),
           sb.from('gastos_evento').delete().eq('evento_id', eventoId),
-          sb.from('barra_movimientos').delete().eq('evento_id', eventoId)
+          sb.from('barra_movimientos').delete().eq('evento_id', eventoId),
+          sb.from('ingresos_evento').delete().eq('evento_id', eventoId)
         ]);
       } else {
         var ins = await sb.from('eventos').insert(payload).select().single();
@@ -1622,9 +1820,12 @@
         .map(function(g){ return { evento_id:eventoId, categoria_id:g.categoria_id||null, descripcion:g.descripcion||'', monto:num(g.monto) }; });
       var barraRows = nightDraft.barra.filter(function(b){ return b.producto_id; })
         .map(function(b){ return { evento_id:eventoId, producto_id:b.producto_id, costo_unitario:num(b.costo_unitario), stock_inicial:num(b.stock_inicial), stock_final:num(b.stock_final) }; });
+      var ingresosRows = (nightDraft.ingresos||[]).filter(function(i){ return num(i.monto) > 0; })
+        .map(function(i){ return { evento_id:eventoId, medio_pago_id:i.medio_pago_id, rubro:i.rubro, monto:num(i.monto) }; });
       if (lotesRows.length){ var r1 = await sb.from('entradas_lotes').insert(lotesRows); if (r1.error) throw r1.error; }
       if (gastosRows.length){ var r2 = await sb.from('gastos_evento').insert(gastosRows); if (r2.error) throw r2.error; }
       if (barraRows.length){ var r3 = await sb.from('barra_movimientos').insert(barraRows); if (r3.error) throw r3.error; }
+      if (ingresosRows.length){ var r4 = await sb.from('ingresos_evento').insert(ingresosRows); if (r4.error) throw r4.error; }
 
       editingEventoId = null; nightDraft = blankNight(); loadDraftIntoForm();
       var savedMonth = payload.fecha.slice(0,7);
@@ -1643,11 +1844,12 @@
       if (!ev) return;
       editingEventoId = id;
       nightDraft = {
-        id: ev.id, fecha: ev.fecha, nombre: ev.nombre, ingreso_barra: ev.ingreso_barra, personal_costo: ev.personal_costo,
+        id: ev.id, fecha: ev.fecha, nombre: ev.nombre, personal_costo: ev.personal_costo,
         notas: ev.notas || '',
         lotes: (ev.lotes||[]).map(function(l){ return { nombre_lote:l.nombre_lote, tipo:l.tipo, precio:l.precio, cantidad:l.cantidad }; }),
         gastos: (ev.gastos||[]).map(function(g){ return { categoria_id:g.categoria_id, descripcion:g.descripcion, monto:g.monto }; }),
-        barra: (ev.barra||[]).map(function(b){ return { producto_id:b.producto_id, costo_unitario:b.costo_unitario, stock_inicial:b.stock_inicial, stock_final:b.stock_final }; })
+        barra: (ev.barra||[]).map(function(b){ return { producto_id:b.producto_id, costo_unitario:b.costo_unitario, stock_inicial:b.stock_inicial, stock_final:b.stock_final }; }),
+        ingresos: (ev.ingresos||[]).map(function(i){ return { rubro:i.rubro, medio_pago_id:i.medio_pago_id, monto:i.monto }; })
       };
       loadDraftIntoForm();
       window.scrollTo({ top:0, behavior:'smooth' });
