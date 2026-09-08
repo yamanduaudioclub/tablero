@@ -170,6 +170,8 @@
   .lineitem-head.barra{ grid-template-columns: 1.2fr .8fr .8fr .8fr 32px; }
   .lineitem-total{ display:flex; justify-content:space-between; padding-top:8px; margin-top:4px; border-top:1px dashed var(--hairline-strong); font-size:.85rem; color:var(--paper-dim); }
   .lineitem-total .num{ color:var(--paper); font-weight:600; }
+  .lineitem-total.subtotal{ font-size:.78rem; opacity:.8; padding-top:6px; }
+  .lineitem-total.subtotal .num{ font-weight:500; }
 
   .import-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
   .import-row label.btn{ display:inline-flex; align-items:center; }
@@ -377,6 +379,7 @@
           <div class="lineitem-head lote" id="lotes-head" hidden><span>Lote</span><span>Tipo</span><span>Precio</span><span>Cant.</span><span>Subtotal</span><span></span></div>
           <div id="night-lotes"></div>
           <button class="btn small" id="add-lote-btn" type="button">+ Agregar lote</button>
+          <div class="lineitem-total subtotal" id="lotes-subtotal-row" hidden><span>Subtotal lotes</span><span class="num" id="lotes-subtotal">$0</span></div>
 
           <div style="margin-top:16px;">
             <span class="subhead" style="font-size:.8rem;">Mesas vendidas</span>
@@ -384,6 +387,7 @@
             <div class="lineitem-head mesa" id="mesas-head" hidden><span>Nombre</span><span>Monto total</span><span>Personas</span><span></span></div>
             <div id="night-mesas"></div>
             <button class="btn small" id="add-mesa-btn" type="button">+ Agregar mesa</button>
+            <div class="lineitem-total subtotal" id="mesas-subtotal-row" hidden><span>Subtotal mesas</span><span class="num" id="mesas-subtotal">$0</span></div>
           </div>
 
           <div class="lineitem-total" id="lotes-total-row" hidden><span>Total entradas</span><span class="num" id="lotes-total">$0</span></div>
@@ -1031,6 +1035,14 @@
     var prow = document.getElementById('personas-total-row');
     prow.hidden = !hasAny;
     document.getElementById('personas-total').textContent = intFmt(personasTotal());
+
+    var lsRow = document.getElementById('lotes-subtotal-row');
+    lsRow.hidden = !nightDraft.lotes.length;
+    document.getElementById('lotes-subtotal').textContent = money(lotesTotal());
+
+    var msRow = document.getElementById('mesas-subtotal-row');
+    msRow.hidden = !(nightDraft.mesas||[]).length;
+    document.getElementById('mesas-subtotal').textContent = money(mesasTotal());
   }
   function renderLotes(){
     var head = document.getElementById('lotes-head');
