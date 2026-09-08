@@ -157,6 +157,8 @@
   .lineitem-row.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; }
   .lineitem-head.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; margin-top:0; }
   .lineitem-row.medio{ grid-template-columns: 1fr 32px; }
+  .lineitem-row.mesa{ grid-template-columns: 1.4fr .9fr .9fr 32px; }
+  .lineitem-head.mesa{ grid-template-columns: 1.4fr .9fr .9fr 32px; }
   .lineitem-row input, .lineitem-row select{ background: var(--ink-900); border:1px solid var(--hairline-strong); color:var(--paper);
     border-radius:7px; padding:7px 9px; font-size:.82rem; width:100%; }
   .lineitem-row .rm{ width:30px; height:30px; border-radius:7px; border:1px solid var(--hairline-strong); background:var(--ink-800);
@@ -223,7 +225,7 @@
   .evento-card .right{ display:flex; align-items:center; gap:14px; }
   .evento-card .net{ font-family:"JetBrains Mono",monospace; font-weight:700; font-size:1rem; text-align:right; min-width:118px; }
   .evento-card .net.good{ color:var(--good); } .evento-card .net.warning{ color:var(--warning); } .evento-card .net.critical{ color:var(--critical); }
-  .evento-card .actions{ display:flex; gap:6px; }
+  .evento-card .actions{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
   .evento-card .fijo-note{ font-size:.72rem; color:var(--paper-mute); margin-top:6px; padding-left:20px; }
   .evento-breakdown{ display:flex; flex-wrap:wrap; gap:5px 20px; margin-top:10px; padding-top:10px;
     border-top:1px dashed var(--hairline-strong); padding-left:20px; }
@@ -271,7 +273,7 @@
     header.top{ flex-direction:column; }
     .evento-card .row1{ grid-template-columns:6px 1fr; }
     .evento-card .right{ grid-column: 1 / -1; justify-content:space-between; margin-top:6px; }
-    .lineitem-row.lote, .lineitem-row.gasto, .lineitem-row.barra, .lineitem-row.prod{ grid-template-columns:1fr; }
+    .lineitem-row.lote, .lineitem-row.gasto, .lineitem-row.barra, .lineitem-row.prod, .lineitem-row.mesa{ grid-template-columns:1fr; }
     .lineitem-head{ display:none; }
   }
 </style>
@@ -281,6 +283,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <!-- ================= LOGIN SCREEN ================= -->
 <div class="login-screen" id="login-screen">
@@ -363,18 +366,28 @@
         </div>
 
         <div style="margin-top:18px;">
-          <span class="subhead">Ingresos de la noche — por medio de pago</span>
-          <p class="hint" style="margin:2px 0 10px;">Gastronomía y Barra se suman al ingreso de la noche y afectan el resultado. Entradas es solo informativo — el ingreso de entradas para el cálculo sigue viniendo de los lotes de abajo.</p>
+          <span class="subhead">Ingresos de la noche — Gastronomía / Barra, por medio de pago</span>
+          <p class="hint" style="margin:2px 0 10px;">Se suma al ingreso de la noche y afecta el resultado. El ingreso de entradas se carga aparte, en el bloque de abajo (lotes y mesas).</p>
           <div id="night-ingresos"></div>
         </div>
 
         <div style="margin-top:18px;">
           <span class="subhead">Lotes de entradas</span>
-          <p class="hint" style="margin:2px 0 10px;">Un renglón por lote (como en Passline): general, VIP, lote 2, aguante, etc.</p>
+          <p class="hint" style="margin:2px 0 10px;">Un renglón por lote (como en Passline): general, VIP, lote 2, aguante, puerta, etc.</p>
           <div class="lineitem-head lote" id="lotes-head" hidden><span>Lote</span><span>Tipo</span><span>Precio</span><span>Cant.</span><span>Subtotal</span><span></span></div>
           <div id="night-lotes"></div>
           <button class="btn small" id="add-lote-btn" type="button">+ Agregar lote</button>
+
+          <div style="margin-top:16px;">
+            <span class="subhead" style="font-size:.8rem;">Mesas vendidas</span>
+            <p class="hint" style="margin:2px 0 10px;">Nombre de la persona, monto total que abonó por la mesa y cantidad de personas. El monto es el total de la mesa — no se multiplica por la cantidad de personas.</p>
+            <div class="lineitem-head mesa" id="mesas-head" hidden><span>Nombre</span><span>Monto total</span><span>Personas</span><span></span></div>
+            <div id="night-mesas"></div>
+            <button class="btn small" id="add-mesa-btn" type="button">+ Agregar mesa</button>
+          </div>
+
           <div class="lineitem-total" id="lotes-total-row" hidden><span>Total entradas</span><span class="num" id="lotes-total">$0</span></div>
+          <div class="lineitem-total" id="personas-total-row" hidden><span>Total personas</span><span class="num" id="personas-total">0</span></div>
         </div>
 
         <div style="margin-top:18px;">
@@ -482,7 +495,7 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><div><h2>Ingresos por medio de pago — este mes</h2><p class="hint">Efectivo, tarjetas y Mercado Pago sumados entre todas las noches (incluye entradas, gastronomía y barra) — para cotejar contra depósitos.</p></div></div>
+        <div class="panel-head"><div><h2>Ingresos por medio de pago — este mes</h2><p class="hint">Efectivo, tarjetas y Mercado Pago de Gastronomía/Barra, sumados entre todas las noches — para cotejar contra depósitos.</p></div></div>
         <div id="ingresos-breakdown"></div>
       </div>
 
@@ -549,12 +562,12 @@
   var booted = false;
   var productosRemovedIds = [];
   var mediosPagoRemovedIds = [];
-  var INGRESO_RUBROS = ['entradas', 'gastronomia', 'barra'];
-  var INGRESO_RUBRO_LABEL = { entradas:'Entradas', gastronomia:'Gastronomía', barra:'Barra' };
+  var INGRESO_RUBROS = ['gastro_barra'];
+  var INGRESO_RUBRO_LABEL = { gastro_barra:'Gastronomía / Barra' };
 
   function blankNight(){
     return { id:null, fecha:'', nombre:'', personal_costo:'', notas:'',
-      lotes:[], gastos:[], barra:[], ingresos:[] };
+      lotes:[], mesas:[], gastos:[], barra:[], ingresos:[] };
   }
 
   // ---------- date / month helpers ----------
@@ -601,11 +614,14 @@
 
   // ---------- pure calc (mirrors calc_test.js) ----------
   function computeEventMetrics(evento, periodo){
-    var ticketRevenue = (evento.lotes||[]).reduce(function(s,l){ return s + num(l.precio)*num(l.cantidad); }, 0);
+    var lotesRevenue = (evento.lotes||[]).reduce(function(s,l){ return s + num(l.precio)*num(l.cantidad); }, 0);
+    var mesasRevenue = (evento.mesas||[]).reduce(function(s,ms){ return s + num(ms.monto); }, 0);
+    var ticketRevenue = lotesRevenue + mesasRevenue;
+    var personasTotal = (evento.lotes||[]).reduce(function(s,l){ return s + num(l.cantidad); }, 0) +
+      (evento.mesas||[]).reduce(function(s,ms){ return s + num(ms.cantidad_personas); }, 0);
     var ingresos = evento.ingresos || [];
-    var gastroRevenue = ingresos.reduce(function(s,i){ return s + (i.rubro==='gastronomia' ? num(i.monto) : 0); }, 0);
-    var barraRevenue = ingresos.reduce(function(s,i){ return s + (i.rubro==='barra' ? num(i.monto) : 0); }, 0);
-    var totalRevenue = ticketRevenue + gastroRevenue + barraRevenue;
+    var gastroBarraRevenue = ingresos.reduce(function(s,i){ return s + (i.rubro==='gastro_barra' ? num(i.monto) : 0); }, 0);
+    var totalRevenue = ticketRevenue + gastroBarraRevenue;
     var gastosTotal = (evento.gastos||[]).reduce(function(s,g){ return s + num(g.monto); }, 0);
     var barraCosto = (evento.barra||[]).reduce(function(s,b){
       return s + Math.max(0, num(b.stock_inicial) - num(b.stock_final)) * num(b.costo_unitario);
@@ -615,8 +631,8 @@
     var taxPct = (num(periodo.sadaic_pct) + num(periodo.iibb_pct)) / 100;
     var tax = totalRevenue * taxPct;
     var contribution = totalRevenue - variableCost - tax;
-    return { ticketRevenue:ticketRevenue, gastroRevenue:gastroRevenue, barraRevenue:barraRevenue, totalRevenue:totalRevenue, gastosTotal:gastosTotal,
-      barraCosto:barraCosto, personalCosto:personalCosto, variableCost:variableCost, tax:tax, contribution:contribution };
+    return { ticketRevenue:ticketRevenue, lotesRevenue:lotesRevenue, mesasRevenue:mesasRevenue, gastroBarraRevenue:gastroBarraRevenue, totalRevenue:totalRevenue, gastosTotal:gastosTotal,
+      barraCosto:barraCosto, personalCosto:personalCosto, variableCost:variableCost, tax:tax, contribution:contribution, personasTotal:personasTotal };
   }
   function applyDynamicFixedDepletion(eventsSortedAsc, fijoTotal){
     var remaining = num(fijoTotal);
@@ -754,11 +770,15 @@
       var eventos = evRes.data || [];
       var ids = eventos.map(function(e){ return e.id; });
 
-      var lotesByEvento = {}, gastosByEvento = {}, barraByEvento = {}, ingresosByEvento = {};
+      var lotesByEvento = {}, mesasByEvento = {}, gastosByEvento = {}, barraByEvento = {}, ingresosByEvento = {};
       if (ids.length){
         var lotesRes = await sb.from('entradas_lotes').select('*').in('evento_id', ids).order('orden', { ascending:true });
         if (lotesRes.error) throw lotesRes.error;
         (lotesRes.data||[]).forEach(function(l){ (lotesByEvento[l.evento_id] = lotesByEvento[l.evento_id]||[]).push(l); });
+
+        var mesasRes = await sb.from('entradas_mesas').select('*').in('evento_id', ids).order('orden', { ascending:true });
+        if (mesasRes.error) throw mesasRes.error;
+        (mesasRes.data||[]).forEach(function(ms){ (mesasByEvento[ms.evento_id] = mesasByEvento[ms.evento_id]||[]).push(ms); });
 
         var gastosRes = await sb.from('gastos_evento').select('*').in('evento_id', ids);
         if (gastosRes.error) throw gastosRes.error;
@@ -774,6 +794,7 @@
       }
       eventos.forEach(function(e){
         e.lotes = lotesByEvento[e.id] || [];
+        e.mesas = mesasByEvento[e.id] || [];
         e.gastos = gastosByEvento[e.id] || [];
         e.barra = barraByEvento[e.id] || [];
         e.ingresos = ingresosByEvento[e.id] || [];
@@ -824,7 +845,7 @@
       totalRevenue += e.totalRevenue; totalNet += e.net;
       var st = computeStatus(e.net, e.totalRevenue, STATE.periodo ? STATE.periodo.margen_pct : 0);
       counts[st]++;
-      totalTickets += (e.lotes||[]).reduce(function(s,l){ return s + num(l.cantidad); }, 0);
+      totalTickets += num(e.personasTotal);
     });
     var count = evs.length;
     var fijoPendiente = evs.length ? evs[evs.length-1].fijoRestanteDespues : (STATE.periodo ? STATE.periodo.fijo_total : 0);
@@ -869,9 +890,9 @@
         '<div class="sub">sobre ' + agg.count + ' noche' + (agg.count===1?'':'s') + '</div>' +
       '</div>' +
       '<div class="kpi">' +
-        '<div class="lbl">Entradas vendidas</div>' +
+        '<div class="lbl">Personas</div>' +
         '<div class="val">' + intFmt(agg.totalTickets) + '</div>' +
-        '<div class="sub">en el mes</div>' +
+        '<div class="sub">entradas + mesas, en el mes</div>' +
       '</div>';
 
     var pillVal = document.getElementById('global-status-val');
@@ -946,20 +967,14 @@
     });
   }
   function ingresosTotalsByRubro(){
-    var totals = { entradas:0, gastronomia:0, barra:0 };
+    var totals = { gastro_barra:0 };
     (nightDraft.ingresos||[]).forEach(function(r){ totals[r.rubro] = (totals[r.rubro]||0) + num(r.monto); });
     return totals;
   }
   function updateIngresosTotals(){
     var t = ingresosTotalsByRubro();
-    var elE = document.getElementById('ingresos-total-entradas');
-    var elG = document.getElementById('ingresos-total-gastro');
-    var elB = document.getElementById('ingresos-total-barra');
-    var elCalc = document.getElementById('ingresos-total-calc');
-    if (elE) elE.textContent = money(t.entradas);
-    if (elG) elG.textContent = money(t.gastronomia);
-    if (elB) elB.textContent = money(t.barra);
-    if (elCalc) elCalc.textContent = money(t.gastronomia + t.barra);
+    var elTotal = document.getElementById('ingresos-total-gastro-barra');
+    if (elTotal) elTotal.textContent = money(t.gastro_barra);
   }
   function renderIngresos(){
     var el = document.getElementById('night-ingresos');
@@ -969,46 +984,53 @@
       el.innerHTML = '<p class="hint" style="margin:0;">Todavía no hay medios de pago cargados — agregalos en el panel "Medios de pago" a la derecha.</p>';
       return;
     }
-    function cellIdx(rubro, medioId){
+    function cellIdx(medioId){
       for (var i=0;i<nightDraft.ingresos.length;i++){
         var r = nightDraft.ingresos[i];
-        if (r.rubro===rubro && r.medio_pago_id===medioId) return i;
+        if (r.rubro==='gastro_barra' && r.medio_pago_id===medioId) return i;
       }
       return -1;
     }
     var rowsHtml = activos.map(function(m){
-      var iE = cellIdx('entradas', m.id), iG = cellIdx('gastronomia', m.id), iB = cellIdx('barra', m.id);
+      var i = cellIdx(m.id);
       return '<tr>' +
         '<td>' + escapeHtml(m.nombre) + '</td>' +
-        '<td><input type="number" min="0" step="1" value="' + (nightDraft.ingresos[iE].monto||0) + '" data-ingreso-idx="' + iE + '" placeholder="0"></td>' +
-        '<td><input type="number" min="0" step="1" value="' + (nightDraft.ingresos[iG].monto||0) + '" data-ingreso-idx="' + iG + '" placeholder="0"></td>' +
-        '<td><input type="number" min="0" step="1" value="' + (nightDraft.ingresos[iB].monto||0) + '" data-ingreso-idx="' + iB + '" placeholder="0"></td>' +
+        '<td><input type="number" min="0" step="1" value="' + (nightDraft.ingresos[i].monto||0) + '" data-ingreso-idx="' + i + '" placeholder="0"></td>' +
       '</tr>';
     }).join('');
     var t = ingresosTotalsByRubro();
     el.innerHTML =
       '<div style="overflow-x:auto;">' +
         '<table class="pay-matrix">' +
-          '<thead><tr><th>Medio de pago</th><th>Entradas <span class="hint-inline">(informativo)</span></th><th>Gastronomía</th><th>Barra</th></tr></thead>' +
+          '<thead><tr><th>Medio de pago</th><th>Monto</th></tr></thead>' +
           '<tbody>' + rowsHtml + '</tbody>' +
           '<tfoot><tr><td>Total</td>' +
-            '<td class="num" id="ingresos-total-entradas">' + money(t.entradas) + '</td>' +
-            '<td class="num" id="ingresos-total-gastro">' + money(t.gastronomia) + '</td>' +
-            '<td class="num" id="ingresos-total-barra">' + money(t.barra) + '</td>' +
+            '<td class="num" id="ingresos-total-gastro-barra">' + money(t.gastro_barra) + '</td>' +
           '</tr></tfoot>' +
         '</table>' +
-      '</div>' +
-      '<p class="hint" style="margin:8px 0 0;">Gastronomía + Barra usados en el cálculo de la noche: <strong id="ingresos-total-calc">' + money(t.gastronomia + t.barra) + '</strong></p>';
+      '</div>';
   }
 
-  // ---------- rendering: form sub-lists (lotes / gastos / barra) ----------
+  // ---------- rendering: form sub-lists (lotes / mesas / gastos / barra) ----------
   function lotesTotal(){
     return nightDraft.lotes.reduce(function(s,l){ return s + num(l.precio)*num(l.cantidad); }, 0);
   }
+  function mesasTotal(){
+    return (nightDraft.mesas||[]).reduce(function(s,ms){ return s + num(ms.monto); }, 0);
+  }
+  function personasTotal(){
+    var deLotes = nightDraft.lotes.reduce(function(s,l){ return s + num(l.cantidad); }, 0);
+    var deMesas = (nightDraft.mesas||[]).reduce(function(s,ms){ return s + num(ms.cantidad_personas); }, 0);
+    return deLotes + deMesas;
+  }
   function updateLotesTotalRow(){
     var row = document.getElementById('lotes-total-row');
-    row.hidden = !nightDraft.lotes.length;
-    document.getElementById('lotes-total').textContent = money(lotesTotal());
+    var hasAny = nightDraft.lotes.length || (nightDraft.mesas||[]).length;
+    row.hidden = !hasAny;
+    document.getElementById('lotes-total').textContent = money(lotesTotal() + mesasTotal());
+    var prow = document.getElementById('personas-total-row');
+    prow.hidden = !hasAny;
+    document.getElementById('personas-total').textContent = intFmt(personasTotal());
   }
   function renderLotes(){
     var head = document.getElementById('lotes-head');
@@ -1029,6 +1051,21 @@
         '<input type="number" min="0" step="1" value="' + (l.cantidad||0) + '" data-lote-field="cantidad" data-lote-idx="' + i + '" placeholder="Cant.">' +
         '<span class="lote-subtotal num" title="Precio × cantidad">= ' + money(subtotal) + '</span>' +
         '<button type="button" class="rm" data-lote-remove="' + i + '" title="Quitar">×</button>' +
+      '</div>';
+    }).join('');
+    updateLotesTotalRow();
+  }
+  function renderMesas(){
+    var head = document.getElementById('mesas-head');
+    var list = document.getElementById('night-mesas');
+    if (!(nightDraft.mesas||[]).length){ head.hidden = true; list.innerHTML = '<p class="hint" style="margin:0 0 8px;">Sin mesas cargadas.</p>'; updateLotesTotalRow(); return; }
+    head.hidden = false;
+    list.innerHTML = nightDraft.mesas.map(function(ms, i){
+      return '<div class="lineitem-row mesa">' +
+        '<input type="text" value="' + escapeHtml(ms.nombre) + '" data-mesa-field="nombre" data-mesa-idx="' + i + '" placeholder="Nombre de la persona">' +
+        '<input type="number" min="0" step="1" value="' + (ms.monto||0) + '" data-mesa-field="monto" data-mesa-idx="' + i + '" placeholder="Monto total">' +
+        '<input type="number" min="0" step="1" value="' + (ms.cantidad_personas||0) + '" data-mesa-field="cantidad_personas" data-mesa-idx="' + i + '" placeholder="Personas">' +
+        '<button type="button" class="rm" data-mesa-remove="' + i + '" title="Quitar">×</button>' +
       '</div>';
     }).join('');
     updateLotesTotalRow();
@@ -1303,7 +1340,7 @@
     document.getElementById('f-name').value = nightDraft.nombre || '';
     document.getElementById('f-staff').value = nightDraft.personal_costo === '' ? '' : nightDraft.personal_costo;
     document.getElementById('f-notes').value = nightDraft.notas || '';
-    renderIngresos(); renderLotes(); renderGastos(); renderBarra(); renderFormPreview();
+    renderIngresos(); renderLotes(); renderMesas(); renderGastos(); renderBarra(); renderFormPreview();
     document.getElementById('form-title').textContent = editingEventoId ? 'Editar noche' : 'Cargar noche';
     document.getElementById('cancel-edit-btn').hidden = !editingEventoId;
   }
@@ -1320,7 +1357,7 @@
     }
     list.innerHTML = evs.map(function(e){
       var st = computeStatus(e.net, e.totalRevenue, STATE.periodo.margen_pct);
-      var qty = (e.lotes||[]).reduce(function(s,l){ return s + num(l.cantidad); }, 0);
+      var qty = num(e.personasTotal);
       var fijoNote = e.fijoAbsorbido > 0
         ? ('Absorbió ' + money(e.fijoAbsorbido) + ' del fijo del mes' + (e.fijoRestanteDespues<=0 ? ' — quedó cubierto.' : ' · quedan ' + money(e.fijoRestanteDespues) + ' por cubrir.'))
         : (e.fijoRestanteDespues > 0 ? 'No llegó a aportar al fijo (' + money(e.fijoRestanteDespues) + ' seguían pendientes).' : 'El fijo del mes ya estaba cubierto — resultado es todo ganancia.');
@@ -1331,7 +1368,7 @@
             '<div class="name">' + escapeHtml(e.nombre || '(sin nombre)') + '</div>' +
             '<div class="meta">' +
               '<span>' + dateShort(e.fecha) + '</span>' +
-              '<span class="num">' + intFmt(qty) + ' entradas</span>' +
+              '<span class="num">' + intFmt(qty) + ' personas</span>' +
               '<span class="num">ingreso ' + money(e.totalRevenue) + '</span>' +
             '</div>' +
           '</div>' +
@@ -1339,6 +1376,8 @@
             '<span class="chip ' + st + '">' + STATUS_ICON[st] + ' ' + STATUS_LABEL[st] + '</span>' +
             '<span class="net ' + st + '">' + moneySigned(e.net) + '</span>' +
             '<div class="actions">' +
+              '<button class="btn small ghost" type="button" data-pdf-evento="' + e.id + '" title="Descargar informe en PDF">📄 PDF</button>' +
+              '<button class="btn small ghost" type="button" data-xlsx-evento="' + e.id + '" title="Descargar planilla en Excel">📊 Excel</button>' +
               '<button class="btn small ghost" type="button" data-edit-evento="' + e.id + '">Editar</button>' +
               '<button class="btn small danger" type="button" data-delete-evento="' + e.id + '">Eliminar</button>' +
             '</div>' +
@@ -1354,6 +1393,248 @@
         '<div class="fijo-note">' + fijoNote + '</div>' +
       '</div>';
     }).join('');
+  }
+
+  // ---------- informe por evento (PDF / Excel) ----------
+  var TIPO_LOTE_LABEL = { general:'General', vip:'VIP', cortesia:'Cortesía', otro:'Otro' };
+
+  function buildEventoReportData(eventoId){
+    var e = computedEventos().find(function(x){ return x.id === eventoId; });
+    if (!e) return null;
+    var status = computeStatus(e.net, e.totalRevenue, STATE.periodo ? STATE.periodo.margen_pct : 12);
+
+    var mediosById = {}; STATE.mediosPago.forEach(function(mp){ mediosById[mp.id] = mp.nombre; });
+    var catsById = {}; STATE.categorias.forEach(function(c){ catsById[c.id] = c.nombre; });
+    var prodsById = {}; STATE.productos.forEach(function(p){ prodsById[p.id] = p.nombre; });
+
+    var lotes = (e.lotes||[]).map(function(l){
+      return { nombre: l.nombre_lote || '', tipo: TIPO_LOTE_LABEL[l.tipo] || l.tipo || '', precio: num(l.precio), cantidad: num(l.cantidad), subtotal: num(l.precio)*num(l.cantidad) };
+    });
+    var mesas = (e.mesas||[]).map(function(ms){
+      return { nombre: ms.nombre || '', monto: num(ms.monto), personas: num(ms.cantidad_personas) };
+    });
+    var ingresos = (e.ingresos||[]).filter(function(i){ return i.rubro === 'gastro_barra' && num(i.monto) > 0; }).map(function(i){
+      return { medio: mediosById[i.medio_pago_id] || '(medio eliminado)', monto: num(i.monto) };
+    });
+    var gastos = (e.gastos||[]).map(function(g){
+      return { categoria: catsById[g.categoria_id] || '(sin categoría)', descripcion: g.descripcion || '', monto: num(g.monto) };
+    });
+    var barra = (e.barra||[]).map(function(b){
+      var consumo = Math.max(0, num(b.stock_inicial) - num(b.stock_final));
+      return { producto: prodsById[b.producto_id] || '(producto eliminado)', costoUnitario: num(b.costo_unitario), stockInicial: num(b.stock_inicial), stockFinal: num(b.stock_final), consumo: consumo, costoTotal: consumo * num(b.costo_unitario) };
+    });
+
+    return {
+      id: e.id, nombre: e.nombre || '(sin nombre)', fecha: e.fecha, notas: e.notas || '',
+      status: status,
+      totalRevenue: e.totalRevenue, variableCost: e.variableCost, tax: e.tax, contribution: e.contribution,
+      fijoAbsorbido: e.fijoAbsorbido, net: e.net,
+      personalCosto: e.personalCosto, gastosTotal: e.gastosTotal, barraCosto: e.barraCosto,
+      personasTotal: num(e.personasTotal),
+      lotes: lotes, lotesTotal: e.lotesRevenue,
+      mesas: mesas, mesasTotal: e.mesasRevenue,
+      entradasTotal: e.ticketRevenue,
+      ingresos: ingresos, ingresosTotal: e.gastroBarraRevenue,
+      gastos: gastos,
+      barra: barra, barraCostoTotal: barra.reduce(function(s,b){ return s + b.costoTotal; }, 0)
+    };
+  }
+
+  function eventoReportFilenameBase(data){
+    var slug = (data.nombre || 'evento').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '');
+    return 'evento-' + (data.fecha || 'sinfecha') + (slug ? '-' + slug : '');
+  }
+
+  function downloadEventoPdf(eventoId){
+    var data = buildEventoReportData(eventoId);
+    if (!data) return;
+    if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF){
+      alert('No se pudo cargar la librería de PDF. Probá de nuevo en un momento.');
+      return;
+    }
+    var doc = new window.jspdf.jsPDF({ unit:'mm', format:'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var marginX = 16, y = 20;
+
+    function ensureSpace(next){
+      if (y + next > pageH - 16){ doc.addPage(); y = 20; }
+    }
+    function h1(text){
+      ensureSpace(10);
+      doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(20,20,20);
+      doc.text(text, marginX, y); y += 8;
+    }
+    function h2(text){
+      ensureSpace(9); y += 2;
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(40,40,40);
+      doc.text(text, marginX, y); y += 6;
+    }
+    function emptyNote(text){
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(120,120,120);
+      doc.text(text, marginX, y); y += 6;
+    }
+    function pline(label, value){
+      ensureSpace(6);
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(60,60,60);
+      doc.text(label, marginX, y);
+      doc.setFont('helvetica','bold'); doc.setTextColor(20,20,20);
+      doc.text(String(value), pageW - marginX, y, { align:'right' });
+      y += 6;
+    }
+    function tableHead(cols, widths){
+      ensureSpace(8);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(90,90,90);
+      var x = marginX;
+      cols.forEach(function(c, i){ doc.text(c, x, y); x += widths[i]; });
+      y += 1.5;
+      doc.setDrawColor(200,200,200);
+      doc.line(marginX, y, pageW - marginX, y);
+      y += 4.5;
+    }
+    function tableRow(cells, widths, aligns){
+      ensureSpace(6);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(30,30,30);
+      var x = marginX;
+      cells.forEach(function(c, i){
+        var align = (aligns && aligns[i]) || 'left';
+        if (align === 'right') doc.text(String(c), x + widths[i], y, { align:'right' });
+        else doc.text(String(c), x, y);
+        x += widths[i];
+      });
+      y += 5.5;
+    }
+
+    h1('Consola Yamandú — Informe de evento');
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90,90,90);
+    doc.text(data.nombre + '  ·  ' + dateShort(data.fecha) + ' (' + (data.fecha||'') + ')', marginX, y);
+    y += 9;
+
+    h2('Resumen');
+    pline('Estado', STATUS_ICON[data.status] + ' ' + STATUS_LABEL[data.status]);
+    pline('Ingresos totales', money(data.totalRevenue));
+    pline('Gastos + impuestos de la noche', money(data.variableCost + data.tax));
+    pline('Resultado de la noche', moneySigned(data.contribution));
+    pline('Fijo mensual absorbido', money(data.fijoAbsorbido));
+    pline('Resultado neto después del fijo', moneySigned(data.net));
+    pline('Total personas', intFmt(data.personasTotal));
+
+    h2('Entradas');
+    if (data.lotes.length){
+      tableHead(['Lote','Tipo','Precio','Cant.','Subtotal'], [50,28,28,20,35]);
+      data.lotes.forEach(function(l){
+        tableRow([l.nombre, l.tipo, money(l.precio), intFmt(l.cantidad), money(l.subtotal)], [50,28,28,20,35], [null,null,'right','right','right']);
+      });
+    } else { emptyNote('Sin lotes cargados.'); }
+    if (data.mesas.length){
+      y += 2;
+      tableHead(['Mesa','Monto','Personas'], [80,50,40]);
+      data.mesas.forEach(function(m){
+        tableRow([m.nombre, money(m.monto), intFmt(m.personas)], [80,50,40], [null,'right','right']);
+      });
+    }
+    y += 1;
+    pline('Total entradas (lotes + mesas)', money(data.entradasTotal));
+    pline('Total personas (lotes + mesas)', intFmt(data.personasTotal));
+
+    h2('Ingresos de Gastronomía / Barra por medio de pago');
+    if (data.ingresos.length){
+      tableHead(['Medio de pago','Monto'], [90,50]);
+      data.ingresos.forEach(function(i){ tableRow([i.medio, money(i.monto)], [90,50], [null,'right']); });
+      y += 1;
+      pline('Total Gastronomía/Barra', money(data.ingresosTotal));
+    } else { emptyNote('Sin ingresos de gastronomía/barra cargados.'); }
+
+    h2('Gastos categorizados');
+    if (data.gastos.length){
+      tableHead(['Categoría','Descripción','Monto'], [42,72,40]);
+      data.gastos.forEach(function(g){ tableRow([g.categoria, g.descripcion, money(g.monto)], [42,72,40], [null,null,'right']); });
+      y += 1;
+      pline('Total gastos categorizados', money(data.gastosTotal));
+    } else { emptyNote('Sin gastos categorizados cargados.'); }
+
+    h2('Consumo de barra');
+    if (data.barra.length){
+      tableHead(['Producto','Costo u.','Inicial','Final','Consumo','Costo total'], [42,24,20,20,25,30]);
+      data.barra.forEach(function(b){
+        tableRow([b.producto, money(b.costoUnitario), intFmt(b.stockInicial), intFmt(b.stockFinal), intFmt(b.consumo), money(b.costoTotal)], [42,24,20,20,25,30], [null,'right','right','right','right','right']);
+      });
+      y += 1;
+      pline('Total costo de mercadería', money(data.barraCostoTotal));
+    } else { emptyNote('Sin consumo de barra cargado.'); }
+
+    if (data.notas){
+      h2('Notas');
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(60,60,60);
+      var lines = doc.splitTextToSize(data.notas, pageW - marginX*2);
+      lines.forEach(function(ln){ ensureSpace(5); doc.text(ln, marginX, y); y += 5; });
+    }
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text('Generado ' + new Date().toLocaleString('es-AR') + ' — Yamandú AudioClub', marginX, pageH - 10);
+
+    doc.save(eventoReportFilenameBase(data) + '.pdf');
+  }
+
+  function downloadEventoXlsx(eventoId){
+    var data = buildEventoReportData(eventoId);
+    if (!data) return;
+    if (typeof XLSX === 'undefined'){ alert('No se pudo cargar la librería de Excel. Probá de nuevo en un momento.'); return; }
+
+    var resumenRows = [
+      { 'Métrica':'Evento', 'Valor': data.nombre },
+      { 'Métrica':'Fecha', 'Valor': data.fecha },
+      { 'Métrica':'Estado', 'Valor': STATUS_LABEL[data.status] },
+      { 'Métrica':'Ingresos totales', 'Valor': data.totalRevenue },
+      { 'Métrica':'  · Entradas (lotes + mesas)', 'Valor': data.entradasTotal },
+      { 'Métrica':'  · Gastronomía / Barra', 'Valor': data.ingresosTotal },
+      { 'Métrica':'Gastos + impuestos de la noche', 'Valor': data.variableCost + data.tax },
+      { 'Métrica':'  · Personal', 'Valor': data.personalCosto },
+      { 'Métrica':'  · Gastos categorizados', 'Valor': data.gastosTotal },
+      { 'Métrica':'  · Consumo de barra (costo)', 'Valor': data.barraCosto },
+      { 'Métrica':'  · Impuestos (SADAIC/IIBB)', 'Valor': data.tax },
+      { 'Métrica':'Resultado de la noche', 'Valor': data.contribution },
+      { 'Métrica':'Fijo mensual absorbido', 'Valor': data.fijoAbsorbido },
+      { 'Métrica':'Resultado neto después del fijo', 'Valor': data.net },
+      { 'Métrica':'Total personas', 'Valor': data.personasTotal }
+    ];
+
+    var personas = data.personasTotal || 0;
+    var pct1 = function(a,b){ return b ? Math.round(a/b*1000)/10 : 0; };
+    var estadisticasRows = [
+      { 'Estadística':'Ingreso promedio por persona', 'Valor': personas ? Math.round(data.totalRevenue/personas) : 0 },
+      { 'Estadística':'Costo promedio por persona', 'Valor': personas ? Math.round((data.variableCost+data.tax)/personas) : 0 },
+      { 'Estadística':'Resultado neto por persona', 'Valor': personas ? Math.round(data.net/personas) : 0 },
+      { 'Estadística':'Margen sobre ingreso (%)', 'Valor': pct1(data.contribution, data.totalRevenue) },
+      { 'Estadística':'Personal como % del ingreso', 'Valor': pct1(data.personalCosto, data.totalRevenue) },
+      { 'Estadística':'Costo de barra como % del ingreso', 'Valor': pct1(data.barraCosto, data.totalRevenue) },
+      { 'Estadística':'Ticket promedio de entradas (lotes+mesas / personas)', 'Valor': personas ? Math.round(data.entradasTotal/personas) : 0 }
+    ];
+
+    var entradasRows = [].concat(
+      data.lotes.map(function(l){ return { 'Tipo':'Lote', 'Nombre': l.nombre, 'Detalle': l.tipo, 'Precio unitario': l.precio, 'Cantidad / Personas': l.cantidad, 'Subtotal': l.subtotal }; }),
+      data.mesas.map(function(m){ return { 'Tipo':'Mesa', 'Nombre': m.nombre, 'Detalle':'', 'Precio unitario':'', 'Cantidad / Personas': m.personas, 'Subtotal': m.monto }; })
+    );
+    if (!entradasRows.length) entradasRows = [{ 'Tipo':'', 'Nombre':'(sin entradas cargadas)', 'Detalle':'', 'Precio unitario':'', 'Cantidad / Personas':'', 'Subtotal':'' }];
+
+    var ingresosRows = data.ingresos.map(function(i){ return { 'Medio de pago': i.medio, 'Monto': i.monto }; });
+    if (!ingresosRows.length) ingresosRows = [{ 'Medio de pago':'(sin ingresos cargados)', 'Monto':'' }];
+
+    var gastosRows = data.gastos.map(function(g){ return { 'Categoría': g.categoria, 'Descripción': g.descripcion, 'Monto': g.monto }; });
+    if (!gastosRows.length) gastosRows = [{ 'Categoría':'(sin gastos cargados)', 'Descripción':'', 'Monto':'' }];
+
+    var barraRows = data.barra.map(function(b){ return { 'Producto': b.producto, 'Costo unitario': b.costoUnitario, 'Stock inicial': b.stockInicial, 'Stock final': b.stockFinal, 'Consumo': b.consumo, 'Costo total': b.costoTotal }; });
+    if (!barraRows.length) barraRows = [{ 'Producto':'(sin consumo cargado)', 'Costo unitario':'', 'Stock inicial':'', 'Stock final':'', 'Consumo':'', 'Costo total':'' }];
+
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenRows), 'Resumen');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(estadisticasRows), 'Estadísticas');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entradasRows), 'Entradas');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ingresosRows), 'Gastronomía-Barra');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gastosRows), 'Gastos');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(barraRows), 'Barra');
+    XLSX.writeFile(wb, eventoReportFilenameBase(data) + '.xlsx');
   }
 
   // ---------- rendering: fijo ledger (mes completo) ----------
@@ -1653,6 +1934,24 @@
     renderLotes(); renderFormPreview();
   });
 
+  // ---------- events: night form — mesas vendidas ----------
+  document.getElementById('night-mesas').addEventListener('input', function(e){
+    var t = e.target; var idx = t.getAttribute('data-mesa-idx'); if (idx===null) return;
+    idx = parseInt(idx,10); var field = t.getAttribute('data-mesa-field');
+    nightDraft.mesas[idx][field] = (field==='monto'||field==='cantidad_personas') ? num(t.value) : t.value;
+    if (field==='monto' || field==='cantidad_personas'){ updateLotesTotalRow(); }
+    renderFormPreview();
+  });
+  document.getElementById('night-mesas').addEventListener('click', function(e){
+    var t = e.target.closest('[data-mesa-remove]'); if (!t) return;
+    nightDraft.mesas.splice(parseInt(t.getAttribute('data-mesa-remove'),10), 1);
+    renderMesas(); renderFormPreview();
+  });
+  document.getElementById('add-mesa-btn').addEventListener('click', function(){
+    nightDraft.mesas.push({ nombre:'', monto:0, cantidad_personas:0 });
+    renderMesas(); renderFormPreview();
+  });
+
   // ---------- events: night form — gastos ----------
   document.getElementById('night-gastos').addEventListener('input', function(e){
     var t = e.target; var idx = t.getAttribute('data-gasto-idx'); if (idx===null) return;
@@ -1805,6 +2104,7 @@
         eventoId = upd.data.id;
         await Promise.all([
           sb.from('entradas_lotes').delete().eq('evento_id', eventoId),
+          sb.from('entradas_mesas').delete().eq('evento_id', eventoId),
           sb.from('gastos_evento').delete().eq('evento_id', eventoId),
           sb.from('barra_movimientos').delete().eq('evento_id', eventoId),
           sb.from('ingresos_evento').delete().eq('evento_id', eventoId)
@@ -1816,6 +2116,8 @@
       }
       var lotesRows = nightDraft.lotes.filter(function(l){ return (l.nombre_lote||'').trim()!==''; })
         .map(function(l, i){ return { evento_id:eventoId, nombre_lote:l.nombre_lote, tipo:l.tipo||'general', precio:num(l.precio), cantidad:num(l.cantidad), orden:i }; });
+      var mesasRows = (nightDraft.mesas||[]).filter(function(ms){ return (ms.nombre||'').trim()!=='' || num(ms.monto) > 0 || num(ms.cantidad_personas) > 0; })
+        .map(function(ms, i){ return { evento_id:eventoId, nombre:ms.nombre||'', monto:num(ms.monto), cantidad_personas:num(ms.cantidad_personas), orden:i }; });
       var gastosRows = nightDraft.gastos.filter(function(g){ return num(g.monto) > 0 || (g.descripcion||'').trim()!==''; })
         .map(function(g){ return { evento_id:eventoId, categoria_id:g.categoria_id||null, descripcion:g.descripcion||'', monto:num(g.monto) }; });
       var barraRows = nightDraft.barra.filter(function(b){ return b.producto_id; })
@@ -1823,6 +2125,7 @@
       var ingresosRows = (nightDraft.ingresos||[]).filter(function(i){ return num(i.monto) > 0; })
         .map(function(i){ return { evento_id:eventoId, medio_pago_id:i.medio_pago_id, rubro:i.rubro, monto:num(i.monto) }; });
       if (lotesRows.length){ var r1 = await sb.from('entradas_lotes').insert(lotesRows); if (r1.error) throw r1.error; }
+      if (mesasRows.length){ var r5 = await sb.from('entradas_mesas').insert(mesasRows); if (r5.error) throw r5.error; }
       if (gastosRows.length){ var r2 = await sb.from('gastos_evento').insert(gastosRows); if (r2.error) throw r2.error; }
       if (barraRows.length){ var r3 = await sb.from('barra_movimientos').insert(barraRows); if (r3.error) throw r3.error; }
       if (ingresosRows.length){ var r4 = await sb.from('ingresos_evento').insert(ingresosRows); if (r4.error) throw r4.error; }
@@ -1838,7 +2141,15 @@
   document.getElementById('eventos-list').addEventListener('click', async function(e){
     var editBtn = e.target.closest('[data-edit-evento]');
     var delBtn = e.target.closest('[data-delete-evento]');
-    if (editBtn){
+    var pdfBtn = e.target.closest('[data-pdf-evento]');
+    var xlsxBtn = e.target.closest('[data-xlsx-evento]');
+    if (pdfBtn){
+      downloadEventoPdf(pdfBtn.getAttribute('data-pdf-evento'));
+      return;
+    } else if (xlsxBtn){
+      downloadEventoXlsx(xlsxBtn.getAttribute('data-xlsx-evento'));
+      return;
+    } else if (editBtn){
       var id = editBtn.getAttribute('data-edit-evento');
       var ev = STATE.eventos.find(function(x){ return x.id === id; });
       if (!ev) return;
@@ -1847,6 +2158,7 @@
         id: ev.id, fecha: ev.fecha, nombre: ev.nombre, personal_costo: ev.personal_costo,
         notas: ev.notas || '',
         lotes: (ev.lotes||[]).map(function(l){ return { nombre_lote:l.nombre_lote, tipo:l.tipo, precio:l.precio, cantidad:l.cantidad }; }),
+        mesas: (ev.mesas||[]).map(function(ms){ return { nombre:ms.nombre, monto:ms.monto, cantidad_personas:ms.cantidad_personas }; }),
         gastos: (ev.gastos||[]).map(function(g){ return { categoria_id:g.categoria_id, descripcion:g.descripcion, monto:g.monto }; }),
         barra: (ev.barra||[]).map(function(b){ return { producto_id:b.producto_id, costo_unitario:b.costo_unitario, stock_inicial:b.stock_inicial, stock_final:b.stock_final }; }),
         ingresos: (ev.ingresos||[]).map(function(i){ return { rubro:i.rubro, medio_pago_id:i.medio_pago_id, monto:i.monto }; })
