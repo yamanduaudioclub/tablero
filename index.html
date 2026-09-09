@@ -152,7 +152,7 @@
   .lineitem-row.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr .9fr 32px; }
   .lineitem-row.lote .lote-subtotal{ font-size:.82rem; color:var(--paper-dim); text-align:right; padding:7px 4px; white-space:nowrap; }
   .lineitem-row.gasto{ grid-template-columns: 1fr 1.3fr .9fr 32px; }
-  .lineitem-row.barra{ grid-template-columns: 1.2fr .8fr .8fr .8fr 32px; }
+  .lineitem-row.barra{ grid-template-columns: 1.1fr .65fr .65fr .65fr .65fr .65fr 32px; }
   .lineitem-row.fc{ grid-template-columns: 1fr 140px 32px; }
   .lineitem-row.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; }
   .lineitem-head.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; margin-top:0; }
@@ -167,7 +167,7 @@
   .lineitem-head{ display:grid; gap:8px; font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--paper-mute); margin-bottom:6px; }
   .lineitem-head.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr .9fr 32px; }
   .lineitem-head.gasto{ grid-template-columns: 1fr 1.3fr .9fr 32px; }
-  .lineitem-head.barra{ grid-template-columns: 1.2fr .8fr .8fr .8fr 32px; }
+  .lineitem-head.barra{ grid-template-columns: 1.1fr .65fr .65fr .65fr .65fr .65fr 32px; }
   .lineitem-total{ display:flex; justify-content:space-between; padding-top:8px; margin-top:4px; border-top:1px dashed var(--hairline-strong); font-size:.85rem; color:var(--paper-dim); }
   .lineitem-total .num{ color:var(--paper); font-weight:600; }
   .lineitem-total.subtotal{ font-size:.78rem; opacity:.8; padding-top:6px; }
@@ -198,6 +198,20 @@
   .import-total .num{ font-family:"JetBrains Mono",monospace; font-weight:700; color:var(--paper); }
   .import-status{ font-size:.78rem; color:var(--paper-mute); margin-top:6px; }
   .import-status.warn{ color:var(--warning); }
+
+  .tramo-toggle{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .tramo-toggle button{ appearance:none; border:1px solid var(--hairline-strong); background:var(--ink-800); color:var(--paper-dim);
+    padding:8px 14px; border-radius:9px; font-size:.82rem; font-weight:600; cursor:pointer; font-family:"JetBrains Mono",monospace; }
+  .tramo-toggle button.active{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .stockplan-table{ width:100%; border-collapse:collapse; font-size:.8rem; }
+  .stockplan-table th{ text-align:right; font-size:.64rem; text-transform:uppercase; letter-spacing:.03em; color:var(--paper-mute); padding:4px 7px; border-bottom:1px solid var(--hairline-strong); }
+  .stockplan-table th:first-child{ text-align:left; }
+  .stockplan-table td{ padding:6px 7px; border-bottom:1px solid var(--hairline); vertical-align:middle; text-align:right; font-family:"JetBrains Mono",monospace; }
+  .stockplan-table td:first-child{ text-align:left; font-family:"Manrope",sans-serif; }
+  .stockplan-table td.highlight{ color:var(--paper); font-weight:700; }
+  .stockplan-table td.buy{ color:var(--warning); font-weight:700; }
+  .stockplan-table td.buy.zero{ color:var(--paper-mute); font-weight:400; }
+  .stockplan-table tfoot td{ font-weight:700; border-top:1px dashed var(--hairline-strong); border-bottom:none; color:var(--paper); }
 
   .config-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
   .config-row.three{ grid-template-columns:1fr 1fr 1fr; }
@@ -404,8 +418,8 @@
 
         <div style="margin-top:18px;">
           <span class="subhead">Barra — consumo de productos</span>
-          <p class="hint" style="margin:2px 0 10px;">Producto, stock inicial y final a costo. Calcula el consumo y lo suma al costo de la noche.</p>
-          <div class="lineitem-head barra" id="barra-head" hidden><span>Producto</span><span>Costo u.</span><span>Stock inicial</span><span>Stock final</span><span></span></div>
+          <p class="hint" style="margin:2px 0 10px;">Producto, costo unitario e Inicio / Repo 1 / Repo 2 / Final a stock. El consumo es Inicio + Repo 1 + Repo 2 − Final, y el Final queda como base de stock para el próximo evento (ver "Planificación de stock" en la columna derecha).</p>
+          <div class="lineitem-head barra" id="barra-head" hidden><span>Producto</span><span>Costo u.</span><span>Inicio</span><span>Repo 1</span><span>Repo 2</span><span>Final</span><span></span></div>
           <div id="night-barra"></div>
           <div class="import-row">
             <button class="btn small" id="add-barra-btn" type="button">+ Agregar producto</button>
@@ -413,7 +427,7 @@
             <label class="btn small ghost" for="barra-import-file">⭱ Importar planilla de stock</label>
             <input type="file" id="barra-import-file" accept=".xlsx,.xls,.csv" hidden>
           </div>
-          <p class="hint" style="margin:6px 0 0;">La planilla necesita columnas <strong>Producto</strong>, <strong>Stock inicial</strong> y <strong>Stock final</strong> (el costo unitario es opcional — si no lo pone, usa el del catálogo). Descargá la modelo para tener los nombres de producto ya bien escritos.</p>
+          <p class="hint" style="margin:6px 0 0;">La planilla necesita columnas <strong>Producto</strong>, <strong>Inicio</strong> y <strong>Final</strong>; <strong>Repo 1</strong> y <strong>Repo 2</strong> son opcionales (para reposiciones de mercadería durante la noche/finde) y el costo unitario también es opcional — si no lo pone, usa el del catálogo. Descargá la modelo para tener los nombres de producto ya bien escritos, con el "Inicio" precargado según el stock actual de cada uno.</p>
           <div id="barra-import-preview" hidden></div>
         </div>
 
@@ -489,6 +503,17 @@
         <p class="hint" style="margin:8px 0 0;">La planilla necesita columnas <strong>Producto</strong> y <strong>Costo</strong>; <strong>Litros</strong> es opcional. Actualiza los productos que coincidan por nombre y da de alta los nuevos — no borra los que no aparezcan en el archivo.</p>
         <div id="catalog-import-preview" hidden></div>
         <div class="form-actions"><button class="btn primary" id="save-productos-btn" type="button">Guardar catálogo</button></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div><h2>Planificación de stock</h2><p class="hint">Consumo promedio por persona (de todas las noches cargadas) proyectado a 3 tamaños de fiesta, contra el stock actual, para saber qué comprar antes del próximo evento.</p></div></div>
+        <div class="tramo-toggle" id="tramo-toggle">
+          <button type="button" data-tramo="150">150 personas</button>
+          <button type="button" data-tramo="250">250 personas</button>
+          <button type="button" data-tramo="450">450 personas</button>
+        </div>
+        <div id="stockplan-body"></div>
+        <p class="hint" style="margin-top:10px;">El "Stock actual" es el <strong>Final</strong> cargado en el evento más reciente de cada producto (de cualquier mes) — se actualiza solo, no hace falta tocar nada acá. Si compraste mercadería sin cargar un evento todavía, el número puede estar desactualizado hasta la próxima noche.</p>
       </div>
 
       <div class="panel">
@@ -568,6 +593,8 @@
   var mediosPagoRemovedIds = [];
   var INGRESO_RUBROS = ['gastro_barra'];
   var INGRESO_RUBRO_LABEL = { gastro_barra:'Gastronomía / Barra' };
+  var STOCK_TRAMOS = [150, 250, 450];
+  var stockPlanTramo = 250;
 
   function blankNight(){
     return { id:null, fecha:'', nombre:'', personal_costo:'', notas:'',
@@ -616,6 +643,11 @@
   var STATUS_LABEL = { good:'Verde', warning:'Amarillo', critical:'Rojo' };
   var STATUS_ICON  = { good:'✓', warning:'≈', critical:'✕' };
 
+  // stock de un producto en una noche = Inicio + Repo 1 + Repo 2 (lo disponible) menos lo que quedó (Final)
+  function barraConsumo(b){
+    return Math.max(0, num(b.stock_inicial) + num(b.repo1) + num(b.repo2) - num(b.stock_final));
+  }
+
   // ---------- pure calc (mirrors calc_test.js) ----------
   function computeEventMetrics(evento, periodo){
     var lotesRevenue = (evento.lotes||[]).reduce(function(s,l){ return s + num(l.precio)*num(l.cantidad); }, 0);
@@ -628,7 +660,7 @@
     var totalRevenue = ticketRevenue + gastroBarraRevenue;
     var gastosTotal = (evento.gastos||[]).reduce(function(s,g){ return s + num(g.monto); }, 0);
     var barraCosto = (evento.barra||[]).reduce(function(s,b){
-      return s + Math.max(0, num(b.stock_inicial) - num(b.stock_final)) * num(b.costo_unitario);
+      return s + barraConsumo(b) * num(b.costo_unitario);
     }, 0);
     var personalCosto = num(evento.personal_costo);
     var variableCost = personalCosto + gastosTotal + barraCosto;
@@ -810,12 +842,51 @@
       STATE.productos = prodRes.data || [];
       STATE.mediosPago = mpRes.data || [];
       STATE.eventos = eventos;
+
+      await loadStockHistory();
     } catch(err){
       showError('No se pudieron cargar los datos: ' + (err && err.message ? err.message : 'error desconocido'));
       throw err;
     } finally {
       showLoading(false);
     }
+  }
+
+  // consumo histórico y stock actual por producto, a través de TODOS los meses (no solo el que se está mirando)
+  // — hace falta para "Planificación de stock", que compara contra el consumo real acumulado de la sala.
+  async function loadStockHistory(){
+    var evRes = await sb.from('eventos').select('id,fecha');
+    if (evRes.error) throw evRes.error;
+    var eventos = evRes.data || [];
+    var ids = eventos.map(function(e){ return e.id; });
+    var fechaById = {};
+    eventos.forEach(function(e){ fechaById[e.id] = e.fecha; });
+    var byProd = {};
+    if (ids.length){
+      var personasById = {};
+      var lRes = await sb.from('entradas_lotes').select('evento_id,cantidad').in('evento_id', ids);
+      if (lRes.error) throw lRes.error;
+      (lRes.data||[]).forEach(function(l){ personasById[l.evento_id] = (personasById[l.evento_id]||0) + num(l.cantidad); });
+      var mRes = await sb.from('entradas_mesas').select('evento_id,cantidad_personas').in('evento_id', ids);
+      if (mRes.error) throw mRes.error;
+      (mRes.data||[]).forEach(function(m){ personasById[m.evento_id] = (personasById[m.evento_id]||0) + num(m.cantidad_personas); });
+
+      var bRes = await sb.from('barra_movimientos').select('evento_id,producto_id,stock_inicial,repo1,repo2,stock_final,costo_unitario').in('evento_id', ids);
+      if (bRes.error) throw bRes.error;
+      (bRes.data||[]).forEach(function(b){
+        var pid = b.producto_id; if (!pid) return;
+        if (!byProd[pid]) byProd[pid] = { consumoTotal:0, personasTotal:0, stockActual:0, fechaStockActual:null };
+        var entry = byProd[pid];
+        entry.consumoTotal += barraConsumo(b);
+        entry.personasTotal += personasById[b.evento_id] || 0;
+        var fecha = fechaById[b.evento_id];
+        if (fecha && (!entry.fechaStockActual || fecha >= entry.fechaStockActual)){
+          entry.fechaStockActual = fecha;
+          entry.stockActual = num(b.stock_final);
+        }
+      });
+    }
+    STATE.stockHistory = byProd;
   }
 
   async function boot(){
@@ -945,6 +1016,50 @@
     }).join('');
   }
   function litrosFmt(n){ return new Intl.NumberFormat('es-AR', { maximumFractionDigits:2 }).format(n); }
+
+  // ---------- planificación de stock: consumo por cápita histórico → 3 escenarios → compra sugerida ----------
+  function renderStockPlan(){
+    var toggle = document.getElementById('tramo-toggle');
+    if (toggle){
+      Array.prototype.forEach.call(toggle.querySelectorAll('[data-tramo]'), function(btn){
+        btn.classList.toggle('active', Number(btn.getAttribute('data-tramo')) === stockPlanTramo);
+      });
+    }
+    var box = document.getElementById('stockplan-body');
+    if (!box) return;
+    var productos = STATE.productos || [];
+    if (!productos.length){ box.innerHTML = '<p class="hint" style="margin:0;">Todavía no hay productos en el catálogo.</p>'; return; }
+    var hist = STATE.stockHistory || {};
+    var totalCompraCosto = 0;
+    var anySinDatos = false;
+    var rows = productos.map(function(p){
+      var h = hist[p.id];
+      var perCapita = (h && h.personasTotal > 0) ? (h.consumoTotal / h.personasTotal) : null;
+      var stockActual = h ? h.stockActual : 0;
+      if (perCapita == null) anySinDatos = true;
+      var idealSel = perCapita != null ? perCapita * stockPlanTramo : null;
+      var compra = idealSel != null ? Math.max(0, Math.ceil(idealSel - stockActual)) : null;
+      if (compra) totalCompraCosto += compra * num(p.costo_unitario);
+      return '<tr>' +
+        '<td>' + escapeHtml(p.nombre) + '</td>' +
+        '<td>' + (perCapita != null ? perCapita.toFixed(3) : '—') + '</td>' +
+        '<td>' + (perCapita != null ? intFmt(Math.round(perCapita * STOCK_TRAMOS[0])) : '—') + '</td>' +
+        '<td>' + (perCapita != null ? intFmt(Math.round(perCapita * STOCK_TRAMOS[1])) : '—') + '</td>' +
+        '<td>' + (perCapita != null ? intFmt(Math.round(perCapita * STOCK_TRAMOS[2])) : '—') + '</td>' +
+        '<td class="highlight">' + intFmt(stockActual) + '</td>' +
+        '<td class="buy' + (!compra ? ' zero' : '') + '">' + (compra != null ? intFmt(compra) : '—') + '</td>' +
+      '</tr>';
+    }).join('');
+    box.innerHTML =
+      '<div style="overflow-x:auto;">' +
+        '<table class="stockplan-table">' +
+          '<thead><tr><th>Producto</th><th>Consumo / persona</th><th>Ideal 150</th><th>Ideal 250</th><th>Ideal 450</th><th>Stock actual</th><th>Compra sugerida</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+          '<tfoot><tr><td colspan="6">Costo estimado de la compra — tramo ' + stockPlanTramo + ' personas</td><td class="buy">' + money(totalCompraCosto) + '</td></tr></tfoot>' +
+        '</table>' +
+      '</div>' +
+      (anySinDatos ? '<p class="hint" style="margin-top:8px;">Los productos marcados con "—" todavía no tienen consumo cargado en ninguna noche — van a mostrar datos apenas guardes un evento con ese producto en el bloque de barra.</p>' : '');
+  }
 
   function renderMediosPago(){
     var list = document.getElementById('medios-pago-list');
@@ -1112,8 +1227,10 @@
       return '<div class="lineitem-row barra">' +
         '<select data-barra-field="producto_id" data-barra-idx="' + i + '">' + opts + '</select>' +
         '<input type="number" min="0" step="1" value="' + (b.costo_unitario||0) + '" data-barra-field="costo_unitario" data-barra-idx="' + i + '" placeholder="Costo u.">' +
-        '<input type="number" min="0" step="1" value="' + (b.stock_inicial||0) + '" data-barra-field="stock_inicial" data-barra-idx="' + i + '" placeholder="Stock inicial">' +
-        '<input type="number" min="0" step="1" value="' + (b.stock_final||0) + '" data-barra-field="stock_final" data-barra-idx="' + i + '" placeholder="Stock final">' +
+        '<input type="number" min="0" step="1" value="' + (b.stock_inicial||0) + '" data-barra-field="stock_inicial" data-barra-idx="' + i + '" placeholder="Inicio">' +
+        '<input type="number" min="0" step="1" value="' + (b.repo1||0) + '" data-barra-field="repo1" data-barra-idx="' + i + '" placeholder="Repo 1">' +
+        '<input type="number" min="0" step="1" value="' + (b.repo2||0) + '" data-barra-field="repo2" data-barra-idx="' + i + '" placeholder="Repo 2">' +
+        '<input type="number" min="0" step="1" value="' + (b.stock_final||0) + '" data-barra-field="stock_final" data-barra-idx="' + i + '" placeholder="Final">' +
         '<button type="button" class="rm" data-barra-remove="' + i + '" title="Quitar">×</button>' +
       '</div>';
     }).join('');
@@ -1127,10 +1244,10 @@
   function downloadStockTemplate(){
     if (typeof XLSX === 'undefined'){ alert('No se pudo cargar la librería de Excel. Probá de nuevo en un momento.'); return; }
     var rows = STATE.productos.length
-      ? STATE.productos.map(function(p){ return { 'Producto': p.nombre, 'Stock inicial': '', 'Stock final': '', 'Costo unitario': p.costo_unitario || 0 }; })
-      : [{ 'Producto': '', 'Stock inicial': '', 'Stock final': '', 'Costo unitario': '' }];
+      ? STATE.productos.map(function(p){ return { 'Producto': p.nombre, 'Inicio': stockActualDe(p.id) || '', 'Repo 1': '', 'Repo 2': '', 'Final': '', 'Costo unitario': p.costo_unitario || 0 }; })
+      : [{ 'Producto': '', 'Inicio': '', 'Repo 1': '', 'Repo 2': '', 'Final': '', 'Costo unitario': '' }];
     var ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 26 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }];
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Stock');
     XLSX.writeFile(wb, 'stock-barra-' + STATE.monthId + '.xlsx');
@@ -1153,19 +1270,24 @@
         var json = XLSX.utils.sheet_to_json(ws, { defval:'' });
         importedRows = json.map(function(row){
           var kNombre = findColKey(row, ['producto','nombre','item','articulo']);
-          var kIni = findColKey(row, ['stock inicial','inicial','stock ini']);
-          var kFin = findColKey(row, ['stock final','final','stock fin']);
+          // "inicio" es el nombre nuevo; se sigue aceptando "stock inicial" por las planillas viejas
+          var kIni = findColKey(row, ['inicio','stock inicial','inicial','stock ini']);
+          var kRepo1 = findColKey(row, ['repo 1','repo1','reposicion 1','reposición 1']);
+          var kRepo2 = findColKey(row, ['repo 2','repo2','reposicion 2','reposición 2']);
+          var kFin = findColKey(row, ['final','stock final','stock fin']);
           var kCosto = findColKey(row, ['costo unitario','costo u','costo','costo u.']);
           var nombre = kNombre ? String(row[kNombre]).trim() : '';
           var stockIni = num(kIni ? row[kIni] : 0);
+          var repo1 = num(kRepo1 ? row[kRepo1] : 0);
+          var repo2 = num(kRepo2 ? row[kRepo2] : 0);
           var stockFin = num(kFin ? row[kFin] : 0);
           var costoFile = (kCosto && row[kCosto] !== '') ? num(row[kCosto]) : null;
           var match = STATE.productos.find(function(p){ return normName(p.nombre) === normName(nombre); });
           var costo = match ? match.costo_unitario : (costoFile != null ? costoFile : 0);
-          var consumo = Math.max(0, stockIni - stockFin);
+          var consumo = Math.max(0, stockIni + repo1 + repo2 - stockFin);
           return {
             nombre: nombre, producto_id: match ? match.id : null,
-            stock_inicial: stockIni, stock_final: stockFin, costo_unitario: costo,
+            stock_inicial: stockIni, repo1: repo1, repo2: repo2, stock_final: stockFin, costo_unitario: costo,
             consumo: consumo, costoTotal: consumo * costo
           };
         }).filter(function(r){ return r.nombre; });
@@ -1187,13 +1309,15 @@
         '<div class="head"><h3>Vista previa — ' + importedRows.length + ' producto' + (importedRows.length===1?'':'s') + '</h3>' +
           '<button class="btn small primary" type="button" id="apply-import-btn">Aplicar a la noche</button></div>' +
         '<div style="overflow-x:auto;"><table class="import-table"><thead><tr>' +
-          '<th>Producto</th><th class="num">Stock inicial</th><th class="num">Stock final</th><th class="num">Consumo</th><th class="num">Costo u.</th><th class="num">Costo total</th><th></th>' +
+          '<th>Producto</th><th class="num">Inicio</th><th class="num">Repo 1</th><th class="num">Repo 2</th><th class="num">Final</th><th class="num">Consumo</th><th class="num">Costo u.</th><th class="num">Costo total</th><th></th>' +
         '</tr></thead><tbody>' +
         importedRows.map(function(r, i){
           var matched = !!r.producto_id;
           return '<tr class="' + (matched ? '' : 'unmatched') + '">' +
             '<td>' + escapeHtml(r.nombre) + (matched ? '' : ' <span title="No está en el catálogo">⚠️</span>') + '</td>' +
             '<td class="num">' + intFmt(r.stock_inicial) + '</td>' +
+            '<td class="num">' + intFmt(r.repo1) + '</td>' +
+            '<td class="num">' + intFmt(r.repo2) + '</td>' +
             '<td class="num">' + intFmt(r.stock_final) + '</td>' +
             '<td class="num">' + intFmt(r.consumo) + '</td>' +
             '<td class="num">' + money(r.costo_unitario) + '</td>' +
@@ -1230,9 +1354,9 @@
     matched.forEach(function(r){
       var existing = nightDraft.barra.find(function(b){ return b.producto_id === r.producto_id; });
       if (existing){
-        existing.stock_inicial = r.stock_inicial; existing.stock_final = r.stock_final; existing.costo_unitario = r.costo_unitario;
+        existing.stock_inicial = r.stock_inicial; existing.repo1 = r.repo1; existing.repo2 = r.repo2; existing.stock_final = r.stock_final; existing.costo_unitario = r.costo_unitario;
       } else {
-        nightDraft.barra.push({ producto_id: r.producto_id, costo_unitario: r.costo_unitario, stock_inicial: r.stock_inicial, stock_final: r.stock_final });
+        nightDraft.barra.push({ producto_id: r.producto_id, costo_unitario: r.costo_unitario, stock_inicial: r.stock_inicial, repo1: r.repo1, repo2: r.repo2, stock_final: r.stock_final });
       }
     });
     importedRows = [];
@@ -1329,7 +1453,7 @@
       STATE.productos = prodRes.data || [];
       catalogImportRows = [];
       document.getElementById('catalog-import-file').value = '';
-      renderProductos(); renderBarra();
+      renderProductos(); renderBarra(); renderStockPlan();
       var box = document.getElementById('catalog-import-preview'); box.hidden = true; box.innerHTML = '';
     } catch(err){
       showError('No se pudo importar el catálogo: ' + (err && err.message ? err.message : 'error desconocido'));
@@ -1432,8 +1556,8 @@
       return { categoria: catsById[g.categoria_id] || '(sin categoría)', descripcion: g.descripcion || '', monto: num(g.monto) };
     });
     var barra = (e.barra||[]).map(function(b){
-      var consumo = Math.max(0, num(b.stock_inicial) - num(b.stock_final));
-      return { producto: prodsById[b.producto_id] || '(producto eliminado)', costoUnitario: num(b.costo_unitario), stockInicial: num(b.stock_inicial), stockFinal: num(b.stock_final), consumo: consumo, costoTotal: consumo * num(b.costo_unitario) };
+      var consumo = barraConsumo(b);
+      return { producto: prodsById[b.producto_id] || '(producto eliminado)', costoUnitario: num(b.costo_unitario), stockInicial: num(b.stock_inicial), repo1: num(b.repo1), repo2: num(b.repo2), stockFinal: num(b.stock_final), consumo: consumo, costoTotal: consumo * num(b.costo_unitario) };
     });
 
     return {
@@ -1568,9 +1692,10 @@
 
     h2('Consumo de barra');
     if (data.barra.length){
-      tableHead(['Producto','Costo u.','Inicial','Final','Consumo','Costo total'], [42,24,20,20,25,30]);
+      var barraW = [34,18,15,15,15,15,20,28];
+      tableHead(['Producto','Costo u.','Inicio','Repo 1','Repo 2','Final','Consumo','Costo total'], barraW);
       data.barra.forEach(function(b){
-        tableRow([b.producto, money(b.costoUnitario), intFmt(b.stockInicial), intFmt(b.stockFinal), intFmt(b.consumo), money(b.costoTotal)], [42,24,20,20,25,30], [null,'right','right','right','right','right']);
+        tableRow([b.producto, money(b.costoUnitario), intFmt(b.stockInicial), intFmt(b.repo1), intFmt(b.repo2), intFmt(b.stockFinal), intFmt(b.consumo), money(b.costoTotal)], barraW, [null,'right','right','right','right','right','right','right']);
       });
       y += 1;
       pline('Total costo de mercadería', money(data.barraCostoTotal));
@@ -1636,8 +1761,8 @@
     var gastosRows = data.gastos.map(function(g){ return { 'Categoría': g.categoria, 'Descripción': g.descripcion, 'Monto': g.monto }; });
     if (!gastosRows.length) gastosRows = [{ 'Categoría':'(sin gastos cargados)', 'Descripción':'', 'Monto':'' }];
 
-    var barraRows = data.barra.map(function(b){ return { 'Producto': b.producto, 'Costo unitario': b.costoUnitario, 'Stock inicial': b.stockInicial, 'Stock final': b.stockFinal, 'Consumo': b.consumo, 'Costo total': b.costoTotal }; });
-    if (!barraRows.length) barraRows = [{ 'Producto':'(sin consumo cargado)', 'Costo unitario':'', 'Stock inicial':'', 'Stock final':'', 'Consumo':'', 'Costo total':'' }];
+    var barraRows = data.barra.map(function(b){ return { 'Producto': b.producto, 'Costo unitario': b.costoUnitario, 'Inicio': b.stockInicial, 'Repo 1': b.repo1, 'Repo 2': b.repo2, 'Final': b.stockFinal, 'Consumo': b.consumo, 'Costo total': b.costoTotal }; });
+    if (!barraRows.length) barraRows = [{ 'Producto':'(sin consumo cargado)', 'Costo unitario':'', 'Inicio':'', 'Repo 1':'', 'Repo 2':'', 'Final':'', 'Consumo':'', 'Costo total':'' }];
 
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenRows), 'Resumen');
@@ -1798,6 +1923,7 @@
     renderPeriodoConfig();
     renderFixedCosts();
     renderProductos();
+    renderStockPlan();
     renderMediosPago();
     renderIngresos();
     renderEventosList();
@@ -1918,7 +2044,7 @@
       var prodRes = await sb.from('productos_barra').select('*').eq('activo', true).order('nombre', { ascending:true });
       if (prodRes.error) throw prodRes.error;
       STATE.productos = prodRes.data || [];
-      renderProductos(); renderBarra();
+      renderProductos(); renderBarra(); renderStockPlan();
     } catch(err){ showError('No se pudo guardar el catálogo de barra: ' + err.message); }
     finally{ btn.disabled = false; btn.textContent = orig; }
   });
@@ -1982,13 +2108,24 @@
   });
 
   // ---------- events: night form — barra ----------
+  // stock actual conocido de un producto (el "Final" del evento más reciente con ese producto) — para
+  // sugerir automáticamente el "Inicio" de una noche nueva. Nunca pisa un valor que el usuario ya tocó.
+  function stockActualDe(productoId){
+    var h = STATE.stockHistory && STATE.stockHistory[productoId];
+    return h ? num(h.stockActual) : 0;
+  }
+  function filaBarraSinTocar(b){
+    return !num(b.stock_inicial) && !num(b.repo1) && !num(b.repo2) && !num(b.stock_final);
+  }
   document.getElementById('night-barra').addEventListener('input', function(e){
     var t = e.target; var idx = t.getAttribute('data-barra-idx'); if (idx===null) return;
     idx = parseInt(idx,10); var field = t.getAttribute('data-barra-field');
     if (field==='producto_id'){
+      var rowWasUntouched = filaBarraSinTocar(nightDraft.barra[idx]);
       nightDraft.barra[idx].producto_id = t.value;
       var opt = t.selectedOptions[0];
       if (opt && opt.getAttribute('data-costo') != null) nightDraft.barra[idx].costo_unitario = num(opt.getAttribute('data-costo'));
+      if (!editingEventoId && rowWasUntouched) nightDraft.barra[idx].stock_inicial = stockActualDe(t.value);
       renderBarra();
     } else {
       nightDraft.barra[idx][field] = num(t.value);
@@ -2002,8 +2139,14 @@
   });
   document.getElementById('add-barra-btn').addEventListener('click', function(){
     var first = STATE.productos[0];
-    nightDraft.barra.push({ producto_id: first ? first.id : null, costo_unitario: first ? first.costo_unitario : 0, stock_inicial:0, stock_final:0 });
+    var inicio = (!editingEventoId && first) ? stockActualDe(first.id) : 0;
+    nightDraft.barra.push({ producto_id: first ? first.id : null, costo_unitario: first ? first.costo_unitario : 0, stock_inicial: inicio, repo1:0, repo2:0, stock_final:0 });
     renderBarra(); renderFormPreview();
+  });
+  document.getElementById('tramo-toggle').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-tramo]'); if (!btn) return;
+    stockPlanTramo = Number(btn.getAttribute('data-tramo'));
+    renderStockPlan();
   });
 
   // ---------- events: importar planilla de stock ----------
@@ -2133,7 +2276,7 @@
       var gastosRows = nightDraft.gastos.filter(function(g){ return num(g.monto) > 0 || (g.descripcion||'').trim()!==''; })
         .map(function(g){ return { evento_id:eventoId, categoria_id:g.categoria_id||null, descripcion:g.descripcion||'', monto:num(g.monto) }; });
       var barraRows = nightDraft.barra.filter(function(b){ return b.producto_id; })
-        .map(function(b){ return { evento_id:eventoId, producto_id:b.producto_id, costo_unitario:num(b.costo_unitario), stock_inicial:num(b.stock_inicial), stock_final:num(b.stock_final) }; });
+        .map(function(b){ return { evento_id:eventoId, producto_id:b.producto_id, costo_unitario:num(b.costo_unitario), stock_inicial:num(b.stock_inicial), repo1:num(b.repo1), repo2:num(b.repo2), stock_final:num(b.stock_final) }; });
       var ingresosRows = (nightDraft.ingresos||[]).filter(function(i){ return num(i.monto) > 0; })
         .map(function(i){ return { evento_id:eventoId, medio_pago_id:i.medio_pago_id, rubro:i.rubro, monto:num(i.monto) }; });
       if (lotesRows.length){ var r1 = await sb.from('entradas_lotes').insert(lotesRows); if (r1.error) throw r1.error; }
@@ -2172,7 +2315,7 @@
         lotes: (ev.lotes||[]).map(function(l){ return { nombre_lote:l.nombre_lote, tipo:l.tipo, precio:l.precio, cantidad:l.cantidad }; }),
         mesas: (ev.mesas||[]).map(function(ms){ return { nombre:ms.nombre, monto:ms.monto, cantidad_personas:ms.cantidad_personas }; }),
         gastos: (ev.gastos||[]).map(function(g){ return { categoria_id:g.categoria_id, descripcion:g.descripcion, monto:g.monto }; }),
-        barra: (ev.barra||[]).map(function(b){ return { producto_id:b.producto_id, costo_unitario:b.costo_unitario, stock_inicial:b.stock_inicial, stock_final:b.stock_final }; }),
+        barra: (ev.barra||[]).map(function(b){ return { producto_id:b.producto_id, costo_unitario:b.costo_unitario, stock_inicial:b.stock_inicial, repo1:b.repo1, repo2:b.repo2, stock_final:b.stock_final }; }),
         ingresos: (ev.ingresos||[]).map(function(i){ return { rubro:i.rubro, medio_pago_id:i.medio_pago_id, monto:i.monto }; })
       };
       loadDraftIntoForm();
