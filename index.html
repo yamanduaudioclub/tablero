@@ -152,7 +152,9 @@
   .lineitem-row.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr .9fr 32px; }
   .lineitem-row.lote .lote-subtotal{ font-size:.82rem; color:var(--paper-dim); text-align:right; padding:7px 4px; white-space:nowrap; }
   .lineitem-row.gasto{ grid-template-columns: 1fr 1.3fr .9fr 32px; }
-  .lineitem-row.barra{ grid-template-columns: 1.1fr .65fr .65fr .65fr .65fr .65fr 32px; }
+  .lineitem-row.barra{ grid-template-columns: 1.05fr .6fr .6fr .6fr .6fr .6fr .6fr .75fr 32px; }
+  .lineitem-row.barra .barra-readonly{ font-size:.82rem; color:var(--paper-dim); text-align:right; padding:7px 4px; white-space:nowrap; font-family:"JetBrains Mono",monospace; }
+  .lineitem-row.barra .barra-readonly.costo{ color:var(--paper); font-weight:600; }
   .lineitem-row.fc{ grid-template-columns: 1fr 140px 32px; }
   .lineitem-row.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; }
   .lineitem-head.prod{ grid-template-columns: 1.3fr .7fr .6fr 32px; margin-top:0; }
@@ -167,7 +169,7 @@
   .lineitem-head{ display:grid; gap:8px; font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--paper-mute); margin-bottom:6px; }
   .lineitem-head.lote{ grid-template-columns: 1.3fr 1fr .9fr .7fr .9fr 32px; }
   .lineitem-head.gasto{ grid-template-columns: 1fr 1.3fr .9fr 32px; }
-  .lineitem-head.barra{ grid-template-columns: 1.1fr .65fr .65fr .65fr .65fr .65fr 32px; }
+  .lineitem-head.barra{ grid-template-columns: 1.05fr .6fr .6fr .6fr .6fr .6fr .6fr .75fr 32px; }
   .lineitem-total{ display:flex; justify-content:space-between; padding-top:8px; margin-top:4px; border-top:1px dashed var(--hairline-strong); font-size:.85rem; color:var(--paper-dim); }
   .lineitem-total .num{ color:var(--paper); font-weight:600; }
   .lineitem-total.subtotal{ font-size:.78rem; opacity:.8; padding-top:6px; }
@@ -231,14 +233,14 @@
 
   #eventos-list{ display:flex; flex-direction:column; gap:10px; }
   .evento-card{ background: var(--ink-800); border:1px solid var(--hairline); border-radius:10px; padding:12px 14px; }
-  .evento-card .row1{ display:grid; grid-template-columns: 6px 1fr auto; align-items:stretch; gap:14px; }
+  .evento-card .row1{ display:grid; grid-template-columns: 6px minmax(0,1fr); align-items:stretch; gap:14px; }
   .evento-card .bar{ align-self:stretch; border-radius:4px; }
   .evento-card .bar.good{ background:var(--good); } .evento-card .bar.warning{ background:var(--warning); } .evento-card .bar.critical{ background:var(--critical); }
   .evento-card .info{ display:flex; flex-direction:column; gap:3px; min-width:0; justify-content:center; }
-  .evento-card .name{ font-weight:700; font-size:.95rem; overflow-wrap:anywhere; }
+  .evento-card .name{ font-weight:700; font-size:.95rem; overflow-wrap:break-word; }
   .evento-card .meta{ font-size:.78rem; color:var(--paper-mute); display:flex; gap:10px; flex-wrap:wrap; }
   .evento-card .meta .num{ color:var(--paper-dim); }
-  .evento-card .right{ display:flex; align-items:center; gap:14px; }
+  .evento-card .right{ display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; grid-column: 1 / -1; justify-content:space-between; margin-top:8px; }
   .evento-card .net{ font-family:"JetBrains Mono",monospace; font-weight:700; font-size:1rem; text-align:right; min-width:118px; }
   .evento-card .net.good{ color:var(--good); } .evento-card .net.warning{ color:var(--warning); } .evento-card .net.critical{ color:var(--critical); }
   .evento-card .actions{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
@@ -287,8 +289,6 @@
     .form-grid{ grid-template-columns:1fr; }
     .preview-box{ grid-template-columns:1fr; }
     header.top{ flex-direction:column; }
-    .evento-card .row1{ grid-template-columns:6px 1fr; }
-    .evento-card .right{ grid-column: 1 / -1; justify-content:space-between; margin-top:6px; }
     .lineitem-row.lote, .lineitem-row.gasto, .lineitem-row.barra, .lineitem-row.prod, .lineitem-row.mesa{ grid-template-columns:1fr; }
     .lineitem-head{ display:none; }
   }
@@ -419,7 +419,7 @@
         <div style="margin-top:18px;">
           <span class="subhead">Barra — consumo de productos</span>
           <p class="hint" style="margin:2px 0 10px;">Producto, costo unitario e Inicio / Repo 1 / Repo 2 / Final a stock. El consumo es Inicio + Repo 1 + Repo 2 − Final, y el Final queda como base de stock para el próximo evento (ver "Planificación de stock" en la columna derecha).</p>
-          <div class="lineitem-head barra" id="barra-head" hidden><span>Producto</span><span>Costo u.</span><span>Inicio</span><span>Repo 1</span><span>Repo 2</span><span>Final</span><span></span></div>
+          <div class="lineitem-head barra" id="barra-head" hidden><span>Producto</span><span>Costo u.</span><span>Inicio</span><span>Repo 1</span><span>Repo 2</span><span>Final</span><span>Consumo</span><span>Costo</span><span></span></div>
           <div id="night-barra"></div>
           <div class="import-row">
             <button class="btn small" id="add-barra-btn" type="button">+ Agregar producto</button>
@@ -427,6 +427,7 @@
             <label class="btn small ghost" for="barra-import-file">⭱ Importar planilla de stock</label>
             <input type="file" id="barra-import-file" accept=".xlsx,.xls,.csv" hidden>
           </div>
+          <div class="lineitem-total" id="barra-total-row" hidden><span>Costo total consumido</span><span class="num" id="barra-total">$0</span></div>
           <p class="hint" style="margin:6px 0 0;">La planilla necesita columnas <strong>Producto</strong>, <strong>Inicio</strong> y <strong>Final</strong>; <strong>Repo 1</strong> y <strong>Repo 2</strong> son opcionales (para reposiciones de mercadería durante la noche/finde) y el costo unitario también es opcional — si no lo pone, usa el del catálogo. Descargá la modelo para tener los nombres de producto ya bien escritos, con el "Inicio" precargado según el stock actual de cada uno.</p>
           <div id="barra-import-preview" hidden></div>
         </div>
@@ -627,6 +628,7 @@
   function money(n){ return moneyFmt.format(Math.round(n||0)); }
   function moneySigned(n){ n = Math.round(n||0); return (n>0?'+':'') + money(n); }
   function intFmt(n){ return new Intl.NumberFormat('es-AR').format(Math.round(n||0)); }
+  function qtyFmt(n){ return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(n||0); }
   function num(v){ var n = parseFloat(v); return isNaN(n) ? 0 : n; }
   function escapeHtml(s){
     return String(s==null?'':s).replace(/[&<>"']/g, function(c){
@@ -1218,12 +1220,14 @@
   function renderBarra(){
     var head = document.getElementById('barra-head');
     var list = document.getElementById('night-barra');
-    if (!nightDraft.barra.length){ head.hidden = true; list.innerHTML = '<p class="hint" style="margin:0 0 8px;">Sin productos cargados.</p>'; return; }
+    if (!nightDraft.barra.length){ head.hidden = true; list.innerHTML = '<p class="hint" style="margin:0 0 8px;">Sin productos cargados.</p>'; updateBarraTotalRow(); return; }
     head.hidden = false;
     list.innerHTML = nightDraft.barra.map(function(b, i){
       var opts = STATE.productos.map(function(p){
         return '<option value="' + p.id + '" data-costo="' + p.costo_unitario + '"' + (b.producto_id===p.id?' selected':'') + '>' + escapeHtml(p.nombre) + '</option>';
       }).join('');
+      var consumo = barraConsumo(b);
+      var costo = consumo * num(b.costo_unitario);
       return '<div class="lineitem-row barra">' +
         '<select data-barra-field="producto_id" data-barra-idx="' + i + '">' + opts + '</select>' +
         '<input type="number" min="0" step="1" value="' + (b.costo_unitario||0) + '" data-barra-field="costo_unitario" data-barra-idx="' + i + '" placeholder="Costo u.">' +
@@ -1231,9 +1235,29 @@
         '<input type="number" min="0" step="1" value="' + (b.repo1||0) + '" data-barra-field="repo1" data-barra-idx="' + i + '" placeholder="Repo 1">' +
         '<input type="number" min="0" step="1" value="' + (b.repo2||0) + '" data-barra-field="repo2" data-barra-idx="' + i + '" placeholder="Repo 2">' +
         '<input type="number" min="0" step="1" value="' + (b.stock_final||0) + '" data-barra-field="stock_final" data-barra-idx="' + i + '" placeholder="Final">' +
+        '<span class="barra-readonly consumo" data-barra-consumo-idx="' + i + '" title="Inicio + Repo 1 + Repo 2 − Final">' + qtyFmt(consumo) + '</span>' +
+        '<span class="barra-readonly costo" data-barra-costo-idx="' + i + '" title="Consumo × costo unitario">' + money(costo) + '</span>' +
         '<button type="button" class="rm" data-barra-remove="' + i + '" title="Quitar">×</button>' +
       '</div>';
     }).join('');
+    updateBarraTotalRow();
+  }
+  function updateBarraRowComputed(idx){
+    var b = nightDraft.barra[idx]; if (!b) return;
+    var consumo = barraConsumo(b);
+    var costo = consumo * num(b.costo_unitario);
+    var cEl = document.querySelector('[data-barra-consumo-idx="' + idx + '"]');
+    var $El = document.querySelector('[data-barra-costo-idx="' + idx + '"]');
+    if (cEl) cEl.textContent = qtyFmt(consumo);
+    if ($El) $El.textContent = money(costo);
+    updateBarraTotalRow();
+  }
+  function updateBarraTotalRow(){
+    var row = document.getElementById('barra-total-row');
+    var hasAny = nightDraft.barra.length > 0;
+    row.hidden = !hasAny;
+    var total = nightDraft.barra.reduce(function(s,b){ return s + barraConsumo(b) * num(b.costo_unitario); }, 0);
+    document.getElementById('barra-total').textContent = money(total);
   }
 
   // ---------- importar planilla de stock (Excel) ----------
@@ -1521,7 +1545,9 @@
         '</div>' +
         '<div class="evento-breakdown">' +
           '<span class="item"><span class="lbl">Ingresos totales</span><span class="num">' + money(e.totalRevenue) + '</span></span>' +
+          '<span class="item"><span class="lbl">· Ingreso Gastronomía/Barra</span><span class="num">' + money(e.gastroBarraRevenue) + '</span></span>' +
           '<span class="item"><span class="lbl">Gastos + impuestos de la noche</span><span class="num">' + money(e.variableCost + e.tax) + '</span></span>' +
+          '<span class="item"><span class="lbl">· Consumo de barra (costo)</span><span class="num">' + money(e.barraCosto) + '</span></span>' +
           '<span class="item"><span class="lbl">Resultado de la noche</span><span class="num">' + moneySigned(e.contribution) + '</span></span>' +
           '<span class="item"><span class="lbl">Fijo mensual absorbido</span><span class="num">' + money(e.fijoAbsorbido) + '</span></span>' +
           '<span class="item"><span class="lbl">Resultado neto después del fijo</span><span class="num ' + st + '">' + moneySigned(e.net) + '</span></span>' +
@@ -2129,6 +2155,7 @@
       renderBarra();
     } else {
       nightDraft.barra[idx][field] = num(t.value);
+      updateBarraRowComputed(idx);
     }
     renderFormPreview();
   });
