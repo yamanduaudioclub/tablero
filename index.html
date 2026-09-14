@@ -251,6 +251,11 @@
   .evento-breakdown .lbl{ color:var(--paper-mute); }
   .evento-breakdown .num{ font-family:"JetBrains Mono",monospace; font-weight:600; color:var(--paper); }
   .evento-breakdown .num.good{ color:var(--good); } .evento-breakdown .num.warning{ color:var(--warning); } .evento-breakdown .num.critical{ color:var(--critical); }
+  .evento-catbreakdown{ display:flex; flex-wrap:wrap; gap:5px 20px; margin-top:6px; padding-top:6px;
+    padding-left:20px; border-top:1px dashed var(--hairline-strong); }
+  .evento-catbreakdown .item{ font-size:.74rem; display:flex; align-items:baseline; gap:5px; }
+  .evento-catbreakdown .lbl{ color:var(--paper-mute); }
+  .evento-catbreakdown .num{ font-family:"JetBrains Mono",monospace; color:var(--paper-dim); font-weight:600; }
   .empty-state{ text-align:center; padding:34px 16px; color:var(--paper-mute); font-size:.9rem; }
   .empty-state .big{ font-size:1.8rem; margin-bottom:8px; }
 
@@ -375,10 +380,17 @@
           <button class="btn ghost small" id="cancel-edit-btn" type="button" hidden>Cancelar edición</button>
         </div>
 
+        <div class="field span2">
+          <label>Tipo de carga</label>
+          <div class="tramo-toggle" id="datemode-toggle" style="margin:6px 0 0;">
+            <button type="button" data-datemode="single" class="active">Fecha puntual</button>
+            <button type="button" data-datemode="range">Rango de fechas (ej: viernes + sábado)</button>
+          </div>
+        </div>
         <div class="form-grid">
-          <div class="field"><label for="f-date">Fecha</label><input type="date" id="f-date"></div>
+          <div class="field"><label for="f-date" id="f-date-label">Fecha</label><input type="date" id="f-date"></div>
           <div class="field"><label for="f-name">Evento / DJ</label><input type="text" id="f-name" placeholder="Ej: Noche de vinilo — Toffolini"></div>
-          <div class="field span2"><label for="f-staff">Costo de personal de la noche ($)</label><input type="number" min="0" step="1" id="f-staff" placeholder="0"></div>
+          <div class="field" id="f-date-fin-wrap" hidden><label for="f-date-fin">Hasta</label><input type="date" id="f-date-fin"></div>
         </div>
 
         <div style="margin-top:18px;">
@@ -598,7 +610,7 @@
   var stockPlanTramo = 250;
 
   function blankNight(){
-    return { id:null, fecha:'', nombre:'', personal_costo:'', notas:'',
+    return { id:null, fecha:'', fecha_fin:'', nombre:'', personal_costo:'', notas:'',
       lotes:[], mesas:[], gastos:[], barra:[], ingresos:[] };
   }
 
@@ -641,6 +653,21 @@
     if (isNaN(d)) return iso;
     return d.toLocaleDateString('es-AR', { weekday:'short', day:'2-digit', month:'short' });
   }
+  // fecha + fecha_fin (opcional) -> "vie 05 – sáb 06 sept" para eventos cargados como rango de fechas
+  function dateRangeShort(fecha, fechaFin){
+    if (!fechaFin || fechaFin === fecha) return dateShort(fecha);
+    var d1 = new Date(fecha + 'T12:00:00');
+    var d2 = new Date(fechaFin + 'T12:00:00');
+    if (isNaN(d1) || isNaN(d2)) return dateShort(fecha);
+    var w1 = d1.toLocaleDateString('es-AR', { weekday:'short' });
+    var w2 = d2.toLocaleDateString('es-AR', { weekday:'short' });
+    var day1 = pad2(d1.getDate()), day2 = pad2(d2.getDate());
+    var sameMonth = d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
+    var month2 = d2.toLocaleDateString('es-AR', { month:'short' });
+    if (sameMonth) return w1 + ' ' + day1 + ' – ' + w2 + ' ' + day2 + ' ' + month2;
+    var month1 = d1.toLocaleDateString('es-AR', { month:'short' });
+    return w1 + ' ' + day1 + ' ' + month1 + ' – ' + w2 + ' ' + day2 + ' ' + month2;
+  }
 
   var STATUS_LABEL = { good:'Verde', warning:'Amarillo', critical:'Rojo' };
   var STATUS_ICON  = { good:'✓', warning:'≈', critical:'✕' };
@@ -664,13 +691,27 @@
     var barraCosto = (evento.barra||[]).reduce(function(s,b){
       return s + barraConsumo(b) * num(b.costo_unitario);
     }, 0);
+    var stockFinalValor = (evento.barra||[]).reduce(function(s,b){
+      return s + num(b.stock_final) * num(b.costo_unitario);
+    }, 0);
     var personalCosto = num(evento.personal_costo);
+    var gastosSinBarra = personalCosto + gastosTotal;
     var variableCost = personalCosto + gastosTotal + barraCosto;
     var taxPct = (num(periodo.sadaic_pct) + num(periodo.iibb_pct)) / 100;
     var tax = totalRevenue * taxPct;
     var contribution = totalRevenue - variableCost - tax;
     return { ticketRevenue:ticketRevenue, lotesRevenue:lotesRevenue, mesasRevenue:mesasRevenue, gastroBarraRevenue:gastroBarraRevenue, totalRevenue:totalRevenue, gastosTotal:gastosTotal,
-      barraCosto:barraCosto, personalCosto:personalCosto, variableCost:variableCost, tax:tax, contribution:contribution, personasTotal:personasTotal };
+      barraCosto:barraCosto, stockFinalValor:stockFinalValor, personalCosto:personalCosto, gastosSinBarra:gastosSinBarra, variableCost:variableCost, tax:tax, contribution:contribution, personasTotal:personasTotal };
+  }
+  // costos por categoría de un evento individual (mismo criterio que renderRubroBreakdown, pero a nivel de una sola noche)
+  function categoryBreakdownForEvent(e){
+    var totals = {};
+    (e.gastos||[]).forEach(function(g){
+      if (g.categoria_id != null) totals[g.categoria_id] = (totals[g.categoria_id]||0) + num(g.monto);
+    });
+    return STATE.categorias.map(function(c){ return { nombre:c.nombre, total: totals[c.id]||0 }; })
+      .filter(function(r){ return r.total > 0; })
+      .sort(function(a,b){ return b.total - a.total; });
   }
   function applyDynamicFixedDepletion(eventsSortedAsc, fijoTotal){
     var remaining = num(fijoTotal);
@@ -1497,12 +1538,29 @@
 
   function loadDraftIntoForm(){
     document.getElementById('f-date').value = nightDraft.fecha || '';
+    document.getElementById('f-date-fin').value = nightDraft.fecha_fin || '';
     document.getElementById('f-name').value = nightDraft.nombre || '';
-    document.getElementById('f-staff').value = nightDraft.personal_costo === '' ? '' : nightDraft.personal_costo;
     document.getElementById('f-notes').value = nightDraft.notas || '';
+    setDateMode(nightDraft.fecha_fin && nightDraft.fecha_fin !== nightDraft.fecha ? 'range' : 'single');
     renderIngresos(); renderLotes(); renderMesas(); renderGastos(); renderBarra(); renderFormPreview();
     document.getElementById('form-title').textContent = editingEventoId ? 'Editar noche' : 'Cargar noche';
     document.getElementById('cancel-edit-btn').hidden = !editingEventoId;
+  }
+  function setDateMode(mode){
+    var wrap = document.getElementById('f-date-fin-wrap');
+    var label = document.getElementById('f-date-label');
+    Array.prototype.forEach.call(document.querySelectorAll('#datemode-toggle [data-datemode]'), function(btn){
+      btn.classList.toggle('active', btn.getAttribute('data-datemode') === mode);
+    });
+    if (mode === 'range'){
+      wrap.hidden = false;
+      label.textContent = 'Desde';
+    } else {
+      wrap.hidden = true;
+      label.textContent = 'Fecha';
+      nightDraft.fecha_fin = '';
+      document.getElementById('f-date-fin').value = '';
+    }
   }
 
   // ---------- rendering: eventos list ----------
@@ -1527,7 +1585,7 @@
           '<div class="info">' +
             '<div class="name">' + escapeHtml(e.nombre || '(sin nombre)') + '</div>' +
             '<div class="meta">' +
-              '<span>' + dateShort(e.fecha) + '</span>' +
+              '<span>' + dateRangeShort(e.fecha, e.fecha_fin) + '</span>' +
               '<span class="num">' + intFmt(qty) + ' personas</span>' +
               '<span class="num">ingreso ' + money(e.totalRevenue) + '</span>' +
             '</div>' +
@@ -1545,16 +1603,29 @@
         '</div>' +
         '<div class="evento-breakdown">' +
           '<span class="item"><span class="lbl">Ingresos totales</span><span class="num">' + money(e.totalRevenue) + '</span></span>' +
-          '<span class="item"><span class="lbl">· Ingreso Gastronomía/Barra</span><span class="num">' + money(e.gastroBarraRevenue) + '</span></span>' +
-          '<span class="item"><span class="lbl">Gastos + impuestos de la noche</span><span class="num">' + money(e.variableCost + e.tax) + '</span></span>' +
-          '<span class="item"><span class="lbl">· Consumo de barra (costo)</span><span class="num">' + money(e.barraCosto) + '</span></span>' +
+          '<span class="item"><span class="lbl">· Ingresos por entradas</span><span class="num">' + money(e.ticketRevenue) + '</span></span>' +
+          '<span class="item"><span class="lbl">· Ingresos por Barra y Gastronomía</span><span class="num">' + money(e.gastroBarraRevenue) + '</span></span>' +
+          '<span class="item"><span class="lbl">Gastos del evento (+ impuestos, sin stock de bebida)</span><span class="num">' + money(e.gastosSinBarra + e.tax) + '</span></span>' +
+          '<span class="item"><span class="lbl">Gastos por consumo de bebida/gastronomía (stock)</span><span class="num">' + money(e.barraCosto) + '</span></span>' +
+          '<span class="item"><span class="lbl">Costo total del stock final</span><span class="num">' + money(e.stockFinalValor) + '</span></span>' +
           '<span class="item"><span class="lbl">Resultado de la noche</span><span class="num">' + moneySigned(e.contribution) + '</span></span>' +
           '<span class="item"><span class="lbl">Fijo mensual absorbido</span><span class="num">' + money(e.fijoAbsorbido) + '</span></span>' +
           '<span class="item"><span class="lbl">Resultado neto después del fijo</span><span class="num ' + st + '">' + moneySigned(e.net) + '</span></span>' +
         '</div>' +
+        renderCategoryBreakdownHtml(e) +
         '<div class="fijo-note">' + fijoNote + '</div>' +
       '</div>';
     }).join('');
+  }
+  function renderCategoryBreakdownHtml(e){
+    var rows = categoryBreakdownForEvent(e);
+    if (!rows.length) return '';
+    return '<div class="evento-catbreakdown">' +
+      '<span class="item"><span class="lbl">Costos por categoría:</span></span>' +
+      rows.map(function(r){
+        return '<span class="item"><span class="lbl">' + escapeHtml(r.nombre) + '</span><span class="num">' + money(r.total) + '</span></span>';
+      }).join('') +
+    '</div>';
   }
 
   // ---------- informe por evento (PDF / Excel) ----------
@@ -1586,12 +1657,14 @@
       return { producto: prodsById[b.producto_id] || '(producto eliminado)', costoUnitario: num(b.costo_unitario), stockInicial: num(b.stock_inicial), repo1: num(b.repo1), repo2: num(b.repo2), stockFinal: num(b.stock_final), consumo: consumo, costoTotal: consumo * num(b.costo_unitario) };
     });
 
+    var catBreakdown = categoryBreakdownForEvent(e);
     return {
-      id: e.id, nombre: e.nombre || '(sin nombre)', fecha: e.fecha, notas: e.notas || '',
+      id: e.id, nombre: e.nombre || '(sin nombre)', fecha: e.fecha, fechaFin: e.fecha_fin || '', notas: e.notas || '',
       status: status,
       totalRevenue: e.totalRevenue, variableCost: e.variableCost, tax: e.tax, contribution: e.contribution,
       fijoAbsorbido: e.fijoAbsorbido, net: e.net,
-      personalCosto: e.personalCosto, gastosTotal: e.gastosTotal, barraCosto: e.barraCosto,
+      personalCosto: e.personalCosto, gastosTotal: e.gastosTotal, gastosSinBarra: e.gastosSinBarra, barraCosto: e.barraCosto, stockFinalValor: e.stockFinalValor,
+      categoriaBreakdown: catBreakdown,
       personasTotal: num(e.personasTotal),
       lotes: lotes, lotesTotal: e.lotesRevenue,
       mesas: mesas, mesasTotal: e.mesasRevenue,
@@ -1670,17 +1743,25 @@
 
     h1('Consola Yamandú — Informe de evento');
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90,90,90);
-    doc.text(data.nombre + '  ·  ' + dateShort(data.fecha) + ' (' + (data.fecha||'') + ')', marginX, y);
+    doc.text(data.nombre + '  ·  ' + dateRangeShort(data.fecha, data.fechaFin) + ' (' + (data.fecha||'') + (data.fechaFin ? ' a ' + data.fechaFin : '') + ')', marginX, y);
     y += 9;
 
     h2('Resumen');
     pline('Estado', STATUS_ICON[data.status] + ' ' + STATUS_LABEL[data.status]);
     pline('Ingresos totales', money(data.totalRevenue));
-    pline('Gastos + impuestos de la noche', money(data.variableCost + data.tax));
+    pline('  · Ingresos por entradas', money(data.entradasTotal));
+    pline('  · Ingresos por Barra y Gastronomía', money(data.ingresosTotal));
+    pline('Gastos del evento (+ impuestos, sin stock de bebida)', money(data.gastosSinBarra + data.tax));
+    pline('Gastos por consumo de bebida/gastronomía (stock)', money(data.barraCosto));
+    pline('Costo total del stock final', money(data.stockFinalValor));
     pline('Resultado de la noche', moneySigned(data.contribution));
     pline('Fijo mensual absorbido', money(data.fijoAbsorbido));
     pline('Resultado neto después del fijo', moneySigned(data.net));
     pline('Total personas', intFmt(data.personasTotal));
+    if (data.categoriaBreakdown.length){
+      y += 1;
+      data.categoriaBreakdown.forEach(function(r){ pline('  · ' + r.nombre, money(r.total)); });
+    }
 
     h2('Entradas');
     if (data.lotes.length){
@@ -1725,6 +1806,7 @@
       });
       y += 1;
       pline('Total costo de mercadería', money(data.barraCostoTotal));
+      pline('Costo total del stock final', money(data.stockFinalValor));
     } else { emptyNote('Sin consumo de barra cargado.'); }
 
     if (data.notas){
@@ -1748,20 +1830,22 @@
     var resumenRows = [
       { 'Métrica':'Evento', 'Valor': data.nombre },
       { 'Métrica':'Fecha', 'Valor': data.fecha },
+      { 'Métrica':'Fecha hasta', 'Valor': data.fechaFin || '' },
       { 'Métrica':'Estado', 'Valor': STATUS_LABEL[data.status] },
       { 'Métrica':'Ingresos totales', 'Valor': data.totalRevenue },
-      { 'Métrica':'  · Entradas (lotes + mesas)', 'Valor': data.entradasTotal },
-      { 'Métrica':'  · Gastronomía / Barra', 'Valor': data.ingresosTotal },
-      { 'Métrica':'Gastos + impuestos de la noche', 'Valor': data.variableCost + data.tax },
+      { 'Métrica':'  · Ingresos por entradas', 'Valor': data.entradasTotal },
+      { 'Métrica':'  · Ingresos por Barra y Gastronomía', 'Valor': data.ingresosTotal },
+      { 'Métrica':'Gastos del evento (+ impuestos, sin stock de bebida)', 'Valor': data.gastosSinBarra + data.tax },
       { 'Métrica':'  · Personal', 'Valor': data.personalCosto },
       { 'Métrica':'  · Gastos categorizados', 'Valor': data.gastosTotal },
-      { 'Métrica':'  · Consumo de barra (costo)', 'Valor': data.barraCosto },
       { 'Métrica':'  · Impuestos (SADAIC/IIBB)', 'Valor': data.tax },
+      { 'Métrica':'Gastos por consumo de bebida/gastronomía (stock)', 'Valor': data.barraCosto },
+      { 'Métrica':'Costo total del stock final', 'Valor': data.stockFinalValor },
       { 'Métrica':'Resultado de la noche', 'Valor': data.contribution },
       { 'Métrica':'Fijo mensual absorbido', 'Valor': data.fijoAbsorbido },
       { 'Métrica':'Resultado neto después del fijo', 'Valor': data.net },
       { 'Métrica':'Total personas', 'Valor': data.personasTotal }
-    ];
+    ].concat(data.categoriaBreakdown.map(function(r){ return { 'Métrica':'  · Categoría: ' + r.nombre, 'Valor': r.total }; }));
 
     var personas = data.personasTotal || 0;
     var pct1 = function(a,b){ return b ? Math.round(a/b*1000)/10 : 0; };
@@ -1812,7 +1896,7 @@
     var rowsHtml = evs.map(function(e){
       var restanteCell = e.fijoRestanteDespues <= 0 ? ' class="num covered"' : ' class="num"';
       return '<tr>' +
-        '<td>' + dateShort(e.fecha) + '</td>' +
+        '<td>' + dateRangeShort(e.fecha, e.fecha_fin) + '</td>' +
         '<td>' + escapeHtml(e.nombre || '(sin nombre)') + '</td>' +
         '<td class="num">' + moneySigned(e.contribution) + '</td>' +
         '<td class="num">' + money(e.fijoAbsorbido) + '</td>' +
@@ -1846,7 +1930,7 @@
       var st = computeStatus(e.net, e.totalRevenue, STATE.periodo.margen_pct);
       var showLabel = (i === maxIdx || i === minIdx);
       var labelHtml = showLabel ? '<div class="chart-val-label' + (isUp ? '' : ' down') + '">' + moneySigned(e.net) + '</div>' : '';
-      var title = escapeHtml(e.nombre || dateShort(e.fecha)) + ' — ' + dateShort(e.fecha) + ' · ' + moneySigned(e.net);
+      var title = escapeHtml(e.nombre || dateRangeShort(e.fecha, e.fecha_fin)) + ' — ' + dateRangeShort(e.fecha, e.fecha_fin) + ' · ' + moneySigned(e.net);
       return '<div class="chart-col" title="' + title + '">' +
         '<div class="chart-plot">' +
           '<div class="zone zone-up" style="height:' + ZONE + 'px">' + (isUp ? (labelHtml + '<div class="chart-bar ' + st + '" style="height:' + h + 'px"></div>') : '') + '</div>' +
@@ -2258,12 +2342,17 @@
   });
 
   // ---------- events: night form fields ----------
-  var draftFieldMap = { 'f-date':'fecha', 'f-name':'nombre', 'f-staff':'personal_costo', 'f-notes':'notas' };
+  var draftFieldMap = { 'f-date':'fecha', 'f-date-fin':'fecha_fin', 'f-name':'nombre', 'f-notes':'notas' };
   Object.keys(draftFieldMap).forEach(function(id){
     document.getElementById(id).addEventListener('input', function(e){
       nightDraft[draftFieldMap[id]] = e.target.value;
       renderFormPreview();
     });
+  });
+  document.getElementById('datemode-toggle').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-datemode]'); if (!btn) return;
+    setDateMode(btn.getAttribute('data-datemode'));
+    renderFormPreview();
   });
   document.getElementById('cancel-edit-btn').addEventListener('click', function(){
     editingEventoId = null; nightDraft = blankNight(); loadDraftIntoForm();
@@ -2272,10 +2361,11 @@
   // ---------- events: save / edit / delete evento ----------
   document.getElementById('save-night-btn').addEventListener('click', async function(){
     if (!nightDraft.fecha || !nightDraft.nombre){ alert('Cargá al menos la fecha y el nombre del evento.'); return; }
+    if (nightDraft.fecha_fin && nightDraft.fecha_fin < nightDraft.fecha){ alert('La fecha "Hasta" no puede ser anterior a la fecha "Desde".'); return; }
     var btn = this; btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Guardando…';
     try{
       var payload = {
-        fecha: nightDraft.fecha, nombre: nightDraft.nombre,
+        fecha: nightDraft.fecha, fecha_fin: nightDraft.fecha_fin || null, nombre: nightDraft.nombre,
         personal_costo: num(nightDraft.personal_costo),
         notas: nightDraft.notas || null
       };
@@ -2337,7 +2427,7 @@
       if (!ev) return;
       editingEventoId = id;
       nightDraft = {
-        id: ev.id, fecha: ev.fecha, nombre: ev.nombre, personal_costo: ev.personal_costo,
+        id: ev.id, fecha: ev.fecha, fecha_fin: ev.fecha_fin || '', nombre: ev.nombre, personal_costo: ev.personal_costo,
         notas: ev.notas || '',
         lotes: (ev.lotes||[]).map(function(l){ return { nombre_lote:l.nombre_lote, tipo:l.tipo, precio:l.precio, cantidad:l.cantidad }; }),
         mesas: (ev.mesas||[]).map(function(ms){ return { nombre:ms.nombre, monto:ms.monto, cantidad_personas:ms.cantidad_personas }; }),
